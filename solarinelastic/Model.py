@@ -10,60 +10,101 @@ from .gaussian_kde import *
 from .Selection import *
 
 
-
-###--- globals ---------------------------------------------------------
-int_config = 'selections.int.'    +'int_config'
-osc_config = 'selections.oscnext.'+'osc_config'
-defaultconfigs = [int_config, osc_config]
-
-defaultpath  = '/data/user/rbusse/analysis/models/ana/'
-sets = {
-    # set             location            name
-    'nominal'     : ['nominal/',         'nominal'],
-    'DOMeff0.90'  : ['sys-DOMeff0.90/',  'DOMeff 0.90'],
-    'DOMeff1.10'  : ['sys-DOMeff1.10/',  'DOMeff 1.10'],
-    'BIceAbs0.95' : ['sys-BIceAbs0.95/', 'BIce abs 0.95'],
-    'BIceAbs1.05' : ['sys-BIceAbs1.05/', 'BIce abs 1.05'],
-    'BIceSct0.95' : ['sys-BIceSct0.95/', 'BIce sct 0.95'],
-    'BIceSct1.05' : ['sys-BIceSct1.05/', 'BIce sct 1.05'],
-    'HIceP0-1'    : ['sys-HIceP0-1/',    'HIce p0 -1'],
-    'HIceP0+1'    : ['sys-HIceP0+1/',    'HIce p0 +1'],
-}
-
-
 class Model(object):
+    ''' Tools for scotogenic minimal DM scenarios.
 
-    def __init__(self, set, batch, name, loc=defaultpath,
-    configs=defaultconfigs, m=8):
+        A class to initialize and work with scenarios of the scotogenic
+        minimal dark matter model, as part of the IceCube solar
+        inelastic WIMPs analysis.
+
+        Parameters
+        ----------
+        set: str
+            Dataset (nominal or any systematic set).
+        batch: str
+            The batch that contains the scenario.
+        name: str or float
+            Name of the scenario (mass of the DM candidate).
+        allsets: dict
+            Names and locations of all datasets used in the analysis.
+        loc: str
+            Location of the batches/scenarios.
+        configs: list
+            Locations of the event selection config files.
+        m: int
+            Speed for KDE fine grid evaluation.
+
+        Attributes
+        ----------
+        set: str
+            Dataset (nominal or any systematic set).
+        batch: str
+            The batch that contains the scenario.
+        name: str or float
+            Name of the scenario (mass of the DM candidate).
+        allsets: dict
+            Names and locations of all datasets used in the analysis.
+        loc: str
+            Location of the batches/scenarios.
+        configs: list
+            Locations of the event selection config files.
+        m: int
+            Speed for KDE fine grid evaluation.
+        modelpath: str
+            Path to scenario.
+        setpath: str
+            Path where dataset specifict scenario results are stored.
+        mdm: float
+            Mass of the DM candidate.
+        input_parameters: dict
+            Scenario parameters.
+        observables: dict
+            Scenario observables.
+        flux_e: ndarray
+            Neutrino energy.
+        flux_numu: ndarray
+            Combined elastic and inelastic muon neutrino flux.
+        flux_numubar: ndarray
+            Combined elastic and inelastic muon antineutrino flux.
+        INT: Selection
+            Hight energy selection.
+        OSC: Selection
+            Low energy selection.
+
+        Methods
+        -------
+        LoadPDFs
+        CreateBPDF
+        CreateSPDF
+        FineGridEvaluation
+        IntpEvalfine
+        LoadResults
+        SaveResults
+        UpdateResults
+
+        Notes
+        -----
+        Raffaela Busse, August 2022
+        raffaela.busse@uni-muenster.de
+
+    '''
+
+    def __init__(self, set, batch, name, allsets, loc, configs, m=8):
 
         self.set       = set
         self.loc       = loc
         self.batch     = batch
-        self.batchname = 'batch_'+batch
         self.name      = name
-        self.modelpath = loc+self.batchname+'/'+name+'/'
-        self.setpath   = self.modelpath+sets[set][0]
+        self.modelpath = loc+'batch_'+batch+'/'+name+'/'
+        self.setpath   = self.modelpath+allsets[set][0]
         self.mdm       = float(self.name)
         self.configs   = configs
         self.m         = m
 
         with open(self.modelpath+self.name+'.txt', 'r') as ls:
             point = eval(ls.readline())
-        self.point = point
 
-        # try:
-        #     point['equi (elastic)']   = float(point['equi (elastic)'])
-        #     point['equi (inelastic)'] = float(point['equi (inelastic)'])
-        #     point['Veff'] = float(point['Veff'].replace('33 ', ''))
-        #     point['depletion rate'] = float(point['depletion rate'])
-        #     # print(point)
-        #     with open(self.modelpath+self.name+'.txt', 'w') as ls:
-        #         dump = json.dumps(point)
-        #         ls.write(dump+'\n')
-        # except:
-        #     print('Model already updated')
-
-        ## Make input parameters accessable more easily:
+        ## Make input parameters accessible more easily:
         input_parameters = {}
         pars_ = {
             'lambda1Input' : 'lam1', 'lambda2Input' : 'lam2',
@@ -214,9 +255,8 @@ class Model(object):
 
     def FineGridEvaluation(self, selection, SB):
         ### This function creates a fine-grid evaluation of the PDF KDEs,
-        ### with the purpose of drawing random toy samples from it.
+        ### with the purpose of drawing random test samples from it.
         ### Provide selection = 'INT' or 'OSC'.
-
 
         SEL = getattr(self, selection)
         print('Calculating fine grid eval for {} {}PDF for set {}, scenario {} ...'.format(SEL.name, SB, self.set, self.name))
@@ -241,9 +281,9 @@ class Model(object):
         ## not for the evaluated grid (which is a simplification),
         ## it can happen that sum(SPDF) != sum(BPDF) and then shit
         ## hits all kinds of fans.
-        # print(eval.sum())
         eval = eval/eval.sum()
         # print(KDE.integrate_box(self.bounds, delta=200))
+
         ## The transposing happens so that the KDE has the same
         ## meaning as a numpy histogram2d()[0]; same reason that
         ## we are saving x, y instead of cx, cy here:

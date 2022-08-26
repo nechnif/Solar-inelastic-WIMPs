@@ -1,22 +1,59 @@
-import importlib
+import sys
 import numpy as np
 import pandas as pd
+import astropy.coordinates as coord
+import astropy.units as u
+from astropy.time import Time
 
 from .dataio import *
 from .solar import *
 from .samplemod import *
 
 
-sunpath = '/data/user/rbusse/analysis/sun/sun_positions/'
-
-
 class Selection(object):
+    ''' Event selection tools.
+
+        A class to initialize and work with different event selections
+        as part of the IceCube solar inelastic WIMPs analysis.
+
+        Parameters
+        ----------
+        name: str
+            Name of selection, 'INT' or 'OSC'.
+        set: str
+            Dataset (nominal or any systematic set).
+        configs: list
+            Locations of the event selection config files.
+        m: int
+            Speed for KDE fine grid evaluation.
+
+        Attributes
+        ----------
+        There's too many, have a look at the __init__ function.
+
+        Methods
+        -------
+        DetermineLivetime
+        OversampleBackground
+        OversampleSignal
+        LoadEvents
+        Aeff
+        LoadAeff
+
+        Notes
+        -----
+        Raffaela Busse, August 2022
+        raffaela.busse@uni-muenster.de
+
+    '''
 
     def __init__(self, name, set, configs, m):
         if name=='INT':
-            config = importlib.import_module(configs[0])
+            sys.path.append('/'.join(configs[0].split('/')[:-1]))
+            import int_config as config
         elif name=='OSC':
-            config = importlib.import_module(configs[1])
+            sys.path.append('/'.join(configs[1].split('/')[:-1]))
+            import osc_config as config
         else:
             print('Name {} not recognized! Aborting.'.format(name))
             return -1
@@ -33,9 +70,6 @@ class Selection(object):
         self.ebins   = config.ebins
         self.psifine = config.psifine
         self.efine   = config.efine
-        # ## Bin centers:
-        # self.cpsibins  = self.psibins[:-1] +self.binwidth_psi/2.
-        # self.cebins = self.ebins[:-1]+self.binwidth_logE/2.
 
         self.bounds_b = config.bounds_b
         self.bounds_s = config.bounds_s
@@ -55,11 +89,8 @@ class Selection(object):
         self.files = config.files
 
     def DetermineLivetime(self, te):
-        import astropy.coordinates as coord
-        import astropy.units as u
-        from astropy.time import Time
+        ## Determine livetime in days.
 
-        # Determine livetime in days:
         self.LoadEvents('background_events')
         bg = self.df_background_events.sort_values('mjd', axis=0)
         # exp = LoadSample(self.files['background_events']).sort_values('mjd', axis=0)
@@ -83,6 +114,9 @@ class Selection(object):
         )
 
     def OversampleBackground(self, rep):
+        ## Background oversampling is needed to smooth out scrambling
+        ## artefacts and to avoid empty bins in the background PDFs.
+
         insample = LoadSample(self.files['exp'])
         if self.ID == 0.0:
             drops = [
@@ -120,6 +154,8 @@ class Selection(object):
         SaveSample(outsample, self.files['background_events'])
 
     def OversampleSignal(self, div=1):
+        ## Signal oversampling is needed for sufficient statistics.
+
         insample = LoadSample(self.files['sim'].replace('SSSS', self.sets[self.set][0]))
         rep = self.sets[self.set][1]
         print('oversampling MC set {} with {} reps ...'.format(self.set, rep))
@@ -130,15 +166,9 @@ class Selection(object):
             else:
                 rep = int(rep/div)
 
-        ## Load sun data:
-        sunfiles = []
-        ## This takes too much memory:
-        # for file in os.listdir(sunpath):
-        #     if 'sundir_' in file:
-        #         sunfiles.append(LoadSample(sunpath+file))
-        # sunlocs  = pd.concat(sunfiles)
-        ## Use this instead:
-        sunlocs = LoadSample(sunpath+'sundir_2011_01.npy').sample(n=len(insample), replace=True)
+        ## Load sun data (which was pre-calculated to save time and
+        ## and memory):
+        sunlocs = LoadSample(self.files['sun']+'sundir_2011_01.npy').sample(n=len(insample), replace=True)
         ## convert distance earth-sun to [cm]:
         sunlocs['dist'] = sunlocs['dist']*1e5
 
