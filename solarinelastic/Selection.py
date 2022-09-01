@@ -78,13 +78,14 @@ class Selection(object):
         self.kwargs_BPDF_KDE = config.kwargs_BPDF_KDE
         self.kwargs_SPDF_KDE = config.kwargs_SPDF_KDE
 
-        self.total           = config.total
-        self.livetime        = config.livetime
-        self.eventsperday    = config.eventsperday
-        self.eventsper9years = config.eventsper9years
-        self.frac            = config.frac
-        self.psicut          = config.psicut
-        self.logEcut         = config.logEcut
+        self.total            = config.total
+        self.livetime         = config.livetime
+        self.eventsperday     = config.eventsperday
+        self.eventsper9years  = config.eventsper9years
+        self.frac             = config.frac
+        self.psicut           = config.psicut
+        self.psicut_farsample = config.psicut_farsample
+        self.logEcut          = config.logEcut
 
         self.files = config.files
 

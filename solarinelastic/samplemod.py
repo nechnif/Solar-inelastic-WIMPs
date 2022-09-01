@@ -7,15 +7,12 @@ from .dataio import *
 from .solar import *
 
 
-def CreateCombined(n_int, n_osc, INT, OSC, seed=None):
+def CreateCombined(n_int, n_osc, INT, OSC, seed=None, farsample=False):
 
-    # INT = Selection('INT', 'nominal')
-    # OSC = Selection('OSC', 'nominal')
     if not hasattr(INT, 'df_exp'):
         INT.LoadEvents('exp')
     if not hasattr(OSC, 'df_exp'):
         OSC.LoadEvents('exp')
-
     dfint = INT.df_exp
     dfosc = OSC.df_exp
 
@@ -24,6 +21,9 @@ def CreateCombined(n_int, n_osc, INT, OSC, seed=None):
     dfint = dfint[dfint['sun_psi']<=INT.psicut]
     dfint = dfint[dfint['logE']<=INT.logEcut[1]]
     dfint = dfint[dfint['logE']>=INT.logEcut[0]]
+    if farsample==True:
+        dfint = dfint[dfint['sun_psi']>=INT.psicut_farsample]
+
     if len(dfint) < n_int:
         dfint = pd.concat([
             dfint.sample(frac=1),
@@ -41,6 +41,8 @@ def CreateCombined(n_int, n_osc, INT, OSC, seed=None):
     dfosc = dfosc[dfosc['sun_psi']<=OSC.psicut]
     dfosc = dfosc[dfosc['logE']<=OSC.logEcut[1]]
     dfosc = dfosc[dfosc['logE']>=OSC.logEcut[0]].sample(n=n_osc, random_state=seed)
+    if farsample==True:
+        dfosc = dfosc[dfosc['sun_psi']>=OSC.psicut_farsample]
 
     df = pd.concat([dfint, dfosc], ignore_index=True)
 

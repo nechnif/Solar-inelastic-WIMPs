@@ -42,7 +42,7 @@ class Model(object):
             The batch that contains the scenario.
         name: str or float
             Name of the scenario (mass of the DM candidate).
-        allsets: dict
+        sets: dict
             Names and locations of all datasets used in the analysis.
         loc: str
             Location of the batches/scenarios.
@@ -92,6 +92,7 @@ class Model(object):
     def __init__(self, set, batch, name, allsets, loc, configs, m=8):
 
         self.set       = set
+        self.sets      = allsets
         self.loc       = loc
         self.batch     = batch
         self.name      = name
@@ -351,7 +352,7 @@ class Model(object):
         self.LoadResults()
         results = self.results
 
-        for name, set in sets.items():
+        for name, set in self.sets.items():
             # print(name, set)
 
             if 'te_ns.txt' in os.listdir(self.modelpath+set[0]):
@@ -389,8 +390,8 @@ class Model(object):
                 'ns_te '        +name  : ns,
                 'MRF_te '       +name  : mrf_te,
 
-                # 'TSmin'              : TSmin,
-                # 'TSmin_ns'           : TSmin_ns,
+                'TSmin '        +name  : TSmin,
+                'TSmin_ns '     +name  : TSmin_ns,
             }
 
             for key, value in new_results.items():

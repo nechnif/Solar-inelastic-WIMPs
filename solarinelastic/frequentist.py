@@ -83,7 +83,7 @@ def TestStatistics(ns, sample, model):
     TS_terms = -2 * np.log( ns/N * sample['SPDF_'+model.name].values/sample['BPDF'].values + (1-ns/N))
     return np.sum(TS_terms)
 
-def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', modefile='', seed=None, div=1, physical=False, correction=False):
+def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', modefile='', seed=None, div=1, physical=False, farsample=False):
     ### If ratio, provide as e.g. [1, 0]. Sum of ratio[0] and ratio[1]
     ### needs to be 1, and N is mandatory.
     ### If livetime, N is calculated automatically.
@@ -93,8 +93,6 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
     if not livetime and not (N and ratio):
         raise ValueError('Values for both N and ratio are required')
 
-    # INT = Selection('INT', model.set)
-    # OSC = Selection('OSC', model.set)
     ## We pre-load the experimental set to save time in the loop:
     model.INT.LoadEvents('exp')
     model.OSC.LoadEvents('exp')
@@ -102,6 +100,7 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
     ## Load the nominal set:
     model_nom = Model(
         'nominal', model.batch, model.name,
+        allsets=model.sets,
         loc=model.loc,
         configs=model.configs,
         m=model.m
@@ -148,9 +147,14 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
             background_osc = SampleFromPDF(model_nom, 'OSC', 'B', nb_osc)
             background = pd.concat([background_int, background_osc], ignore_index=True)
         elif kind == 'data':
-            background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seed)
+            background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seed, farsample=farsample)
         else:
             raise ValueError('kind ' + str(kind) + ' unknown.')
+
+        bint = background[background['sel']==1]
+        bosc = background[background['sel']==0]
+        # print(np.rad2deg(np.min(bint['sun_psi'])))
+        # print(np.rad2deg(np.min(bosc['sun_psi'])))
 
         sample_ = pd.concat([background, signal_int, signal_osc], ignore_index=True).sample(frac=1)
         sample_ = sample_.drop([
@@ -207,38 +211,7 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
     else:
         SaveSample(resultsdf, outfile+'_{:05d}'.format(mu)+'.npy')
 
-def NumberOfSignalEvents(model, livetime, sample=None):    # Provide te in days.
-    ### Calculate the number of signal events for the current set.
-
-    day_s = 86400.        # day in seconds
-    te_s  = livetime * day_s
-
-    if not sample:
-        sample = AllSignalsWeighted(model)
-        ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
-    else:
-        if 'dist' not in sample.columns:
-            ## This is only for test purposes!
-            print('WARNING: No "dist" column found. Are you sure this is a signal sample?')
-            ns = np.sum(sample['wimp'])*te_s
-        else:
-            ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
-
-    np.savetxt(
-        model.setpath+'te_ns.txt',
-        np.array([[livetime], [ns]]).T, fmt='%.4e',
-        header='livetime [days]\tns [per livetime]'
-    )
-
-    # model.LoadResults()
-    # model.results['te'] = livetime
-    # model.results['ns_te '+model.set] = ns
-    # model.SaveResults()
-
-    # print('total ns in {} days ({:.2e} years):\t{:.2e}'.format(te, te/365, ns))
-    return livetime, ns
-
-def MaxLikelihood(model, livetime):
+def TSmin(model, livetime, seed=None):
 
     ## This only makes sense with the nominal set:
     if model.set != 'nominal':
@@ -247,7 +220,10 @@ def MaxLikelihood(model, livetime):
 
     n_int = int(np.rint(livetime*model.INT.eventsperday))
     n_osc = int(np.rint(livetime*model.OSC.eventsperday))
-    sample = CreateCombined(n_int, n_osc, INT=model.INT, OSC=model.OSC, seed=1010)    # good seeds: 1007
+    if seed:
+        sample = CreateCombined(n_int, n_osc, INT=model.INT, OSC=model.OSC, seed=seed)    # good seeds: 1007
+    else:
+        sample = CreateCombined(n_int, n_osc, INT=model.INT, OSC=model.OSC)
     N = len(sample)
 
     model.LoadPDFs()
@@ -281,6 +257,37 @@ def MaxLikelihood(model, livetime):
     # model.SaveResults()
     # model.UpdateResults()
     return 0
+
+def NumberOfSignalEvents(model, livetime, sample=None):    # Provide te in days.
+    ### Calculate the number of signal events for the current set.
+
+    day_s = 86400.        # day in seconds
+    te_s  = livetime * day_s
+
+    if not sample:
+        sample = AllSignalsWeighted(model)
+        ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
+    else:
+        if 'dist' not in sample.columns:
+            ## This is only for test purposes!
+            print('WARNING: No "dist" column found. Are you sure this is a signal sample?')
+            ns = np.sum(sample['wimp'])*te_s
+        else:
+            ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
+
+    np.savetxt(
+        model.setpath+'te_ns.txt',
+        np.array([[livetime], [ns]]).T, fmt='%.4e',
+        header='livetime [days]\tns [per livetime]'
+    )
+
+    # model.LoadResults()
+    # model.results['te'] = livetime
+    # model.results['ns_te '+model.set] = ns
+    # model.SaveResults()
+
+    # print('total ns in {} days ({:.2e} years):\t{:.2e}'.format(te, te/365, ns))
+    return livetime, ns
 
 def Sensitivity(model, livetime, numtests=500, points=None, append=False):
 
