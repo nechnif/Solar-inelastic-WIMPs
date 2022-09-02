@@ -21,7 +21,7 @@ def CreateCombined(n_int, n_osc, INT, OSC, seed=None, farsample=False):
     dfint = dfint[dfint['sun_psi']<=INT.psicut]
     dfint = dfint[dfint['logE']<=INT.logEcut[1]]
     dfint = dfint[dfint['logE']>=INT.logEcut[0]]
-    if farsample==True:
+    if farsample=='farsample':
         dfint = dfint[dfint['sun_psi']>=INT.psicut_farsample]
 
     if len(dfint) < n_int:
@@ -41,7 +41,7 @@ def CreateCombined(n_int, n_osc, INT, OSC, seed=None, farsample=False):
     dfosc = dfosc[dfosc['sun_psi']<=OSC.psicut]
     dfosc = dfosc[dfosc['logE']<=OSC.logEcut[1]]
     dfosc = dfosc[dfosc['logE']>=OSC.logEcut[0]].sample(n=n_osc, random_state=seed)
-    if farsample==True:
+    if farsample=='farsample':
         dfosc = dfosc[dfosc['sun_psi']>=OSC.psicut_farsample]
 
     df = pd.concat([dfint, dfosc], ignore_index=True)

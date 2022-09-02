@@ -83,7 +83,7 @@ def TestStatistics(ns, sample, model):
     TS_terms = -2 * np.log( ns/N * sample['SPDF_'+model.name].values/sample['BPDF'].values + (1-ns/N))
     return np.sum(TS_terms)
 
-def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', modefile='', seed=None, div=1, physical=False, farsample=False):
+def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', modefile='', seed=None, div=1, physical=False):
     ### If ratio, provide as e.g. [1, 0]. Sum of ratio[0] and ratio[1]
     ### needs to be 1, and N is mandatory.
     ### If livetime, N is calculated automatically.
@@ -147,7 +147,7 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
             background_osc = SampleFromPDF(model_nom, 'OSC', 'B', nb_osc)
             background = pd.concat([background_int, background_osc], ignore_index=True)
         elif kind == 'data':
-            background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seed, farsample=farsample)
+            background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seed, farsample=model.set)
         else:
             raise ValueError('kind ' + str(kind) + ' unknown.')
 
@@ -163,11 +163,18 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
 
         t2 = time.time()
 
-        ## Interpreting signals always with the nominal PDFs:
-        PDF(sample_, model_nom, 'INT', 'B')
-        PDF(sample_, model_nom, 'INT', 'S')
-        PDF(sample_, model_nom, 'OSC', 'B')
-        PDF(sample_, model_nom, 'OSC', 'S')
+        ## Interpreting events always with the nominal PDFs, except when
+        ## using the far-sample:
+        if model.set=='farsample':
+            PDF(sample_, model,     'INT', 'B')
+            PDF(sample_, model_nom, 'INT', 'S')
+            PDF(sample_, model,     'OSC', 'B')
+            PDF(sample_, model_nom, 'OSC', 'S')
+        else:
+            PDF(sample_, model_nom, 'INT', 'B')
+            PDF(sample_, model_nom, 'INT', 'S')
+            PDF(sample_, model_nom, 'OSC', 'B')
+            PDF(sample_, model_nom, 'OSC', 'S')
         t3 = time.time()
 
         # check = InspectPDFs(sample_, model)

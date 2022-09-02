@@ -3,6 +3,7 @@ import pickle, json
 import numpy as np
 from numpy import nan
 import pandas as pd
+from scipy.interpolate import RectBivariateSpline
 
 from .dataio import *
 from .solar import *
@@ -172,19 +173,16 @@ class Model(object):
             Sintp = pickle.load(
                 open(self.setpath+'PDFs/'+selection+'_SPDF_KDE_evalfine-intp.pkl', 'rb')
             )
-
             setattr(self, selection+'_SPDF_evalfine', Seval)
             setattr(self, selection+'_SPDF_evalintp', Sintp)
-            # setattr(self, selection+'_cfine_psi',  fine_psi)
-            # setattr(self, selection+'_cfine_logE', fine_psi)
 
             ## Background PDFs:
             Beval, _, _ = np.load(
-                SEL.files['BPDF_KDE_evalfine'].replace('MM', str(self.m).zfill(2)),
+                os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalfine'],
                 allow_pickle=True
             )
             Bintp = pickle.load(
-                open(SEL.files['BPDF_KDE_evalintp'].replace('MM', str(self.m).zfill(2)), 'rb')
+                open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalintp'], 'rb')
             )
             setattr(self, selection+'_BPDF_evalfine',  Beval)
             setattr(self, selection+'_BPDF_evalintp',  Bintp)
@@ -196,6 +194,10 @@ class Model(object):
         SEL = getattr(self, selection)
 
         sample = LoadSample(SEL.files['background_events'])
+
+        if self.set=='farsample':
+            sample = sample[sample['sun_psi']>=SEL.psicut_farsample]
+            # print(np.min(np.rad2deg(sample['sun_psi'])))
 
         ## Create histogram:
         X = sample['sun_psi'].values
@@ -216,8 +218,12 @@ class Model(object):
         print('background bandwidth:\t', SEL.bw)
 
         ## Save everything:
-        np.save(SEL.files['BPDF_histogram'], hist)
-        pickle.dump(kernel, open(SEL.files['BPDF_KDE'], 'wb'))
+        if self.set == 'farsample':
+            print('Saving as far-sample BPDF.')
+        else:
+            print('Saving as combined BPDF.')
+        np.save(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_histogram'], hist)
+        pickle.dump(kernel, open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE'], 'wb'))
 
     def CreateSPDF(self, selection):
         ### Create signal PDFs.
@@ -270,7 +276,7 @@ class Model(object):
 
         name = SB+'PDF_KDE'
         if SB=='B':
-            KDE = pickle.load(open(SEL.files['BPDF_KDE'], 'rb'))
+            KDE = pickle.load(open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE'], 'rb'))
         else:
             KDE = pickle.load(open(self.setpath+'PDFs/'+SEL.name+'_'+name+'.pkl', 'rb'))
 
@@ -293,7 +299,7 @@ class Model(object):
         ## Save:
         if SB=='B':
             pickle.dump((eval, x, y),
-                open(SEL.files['BPDF_KDE_evalfine'].replace('MM', str(self.m).zfill(2)), 'wb')
+                open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalfine'], 'wb')
             )
         else:
             pickle.dump((eval, x, y),
@@ -306,25 +312,26 @@ class Model(object):
 
     def IntpEvalfine(self, selection, SB):
         ### Interpolate fine grid evaluation.
-        ### Provide selection = 'INT' or 'OSC'.
+        ### Provide selection = 'INT' or 'OSC', and SB = 'S' or 'B' for
+        ### signal/ background.
 
         SEL = getattr(self, selection)
 
         ## Load fine grid eval:
-        if SB=='S':
+        if SB=='B':
+            eval, x, y = np.load(
+                os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalfine'],
+                allow_pickle=True
+            )
+            F = RectBivariateSpline(x, y, eval)
+            pickle.dump(F, open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalintp'], 'wb'))
+        else:
             eval, x, y = np.load(
                 self.setpath+'PDFs/'+SEL.name+'_SPDF_KDE_evalfine.npy',
                 allow_pickle=True
             )
             F = RectBivariateSpline(x, y, eval)
             pickle.dump(F, open(self.setpath+'PDFs/'+SEL.name+'_SPDF_KDE_evalfine-intp.pkl', 'wb'))
-        if SB=='B':
-            eval, x, y = np.load(
-                SEL.files['BPDF_KDE_evalfine'].replace('MM', str(self.m).zfill(2)),
-                allow_pickle=True
-            )
-            F = RectBivariateSpline(x, y, eval)
-            pickle.dump(F, open(SEL.files['BPDF_KDE_evalintp'].replace('MM', str(self.m).zfill(2)), 'wb'))
 
     def LoadResults(self):
         if 'results.txt' in os.listdir(self.modelpath):
