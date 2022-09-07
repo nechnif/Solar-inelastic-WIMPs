@@ -14,7 +14,7 @@ def PDF(sample, model, selection, SB):
     ### SB = 'S' or 'B'
 
     SEL = getattr(model, selection)
-    events = sample[sample['sel']==SEL.ID]
+    events = sample[sample['sel']==SEL.id]
     X = events['sun_psi'].values
     Y = events['logE'].values
 
@@ -27,7 +27,7 @@ def PDF(sample, model, selection, SB):
     for i in range(len(X)):
         eval.append(F(X[i], Y[i])[0][0])
 
-    sample.loc[sample['sel']==SEL.ID, name] = eval
+    sample.loc[sample['sel']==SEL.id, name] = eval
 
     return sample
 
@@ -48,10 +48,8 @@ def SampleFromPDF(model, selection, SB, N, seed=None):
     # cx   = getattr(model, SEL.name+'_cfine_psi')
     # cy   = getattr(model, SEL.name+'_cfine_logE')
 
-    if seed:
-        rng = np.random.default_rng(seed)
-    else:
-        rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
+
     psi, logE = [], []
     sample = rng.choice(eval.size, N, p=eval.ravel()/eval.sum())
     a, b = np.unravel_index(sample, eval.shape)
@@ -60,7 +58,7 @@ def SampleFromPDF(model, selection, SB, N, seed=None):
 
     pdfsample = pd.DataFrame(columns=['sun_psi', 'logE', 'sel'])
     pdfsample['sun_psi'], pdfsample['logE'] = np.concatenate(psi), np.concatenate(logE)
-    pdfsample['sel'] = np.ones(len(pdfsample)) * SEL.ID
+    pdfsample['sel'] = np.ones(len(pdfsample)) * SEL.id
     return pdfsample
 
 def Likelihood(ns, sample, model):
@@ -83,7 +81,7 @@ def TestStatistics(ns, sample, model):
     TS_terms = -2 * np.log( ns/N * sample['SPDF_'+model.name].values/sample['BPDF'].values + (1-ns/N))
     return np.sum(TS_terms)
 
-def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', modefile='', seed=None, div=1, physical=False):
+def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', div=1, physical=False, seed=None):
     ### If ratio, provide as e.g. [1, 0]. Sum of ratio[0] and ratio[1]
     ### needs to be 1, and N is mandatory.
     ### If livetime, N is calculated automatically.
@@ -107,7 +105,6 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
     )
 
     tests = int(tests/div)
-    rng = np.random.default_rng()
     mu_inj, TS, ns, TS_corr, ns_corr = [], [], [], [], []
 
     if livetime:
@@ -120,6 +117,11 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
         ratio_int, ratio_osc = ratio[0], ratio[1]
 
     starttime = time.time()
+
+    ## Pick random numbers:
+    rng = np.random.default_rng(seed=seed)
+    seeds = np.array(rng.random(tests)*1e5).astype(int)
+    # print(seeds)
 
     ## Run tests:
     print('i\tN\tmu\tmu_inj\tns\tminTS')
@@ -138,16 +140,16 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
 
         t0 = time.time()
         ## Injecting signals from the given sample:
-        signal_int = SampleFromPDF(model, 'INT', 'S', ns_int)
-        signal_osc = SampleFromPDF(model, 'OSC', 'S', ns_osc)
+        signal_int = SampleFromPDF(model, 'INT', 'S', ns_int, seed=seeds[i])
+        signal_osc = SampleFromPDF(model, 'OSC', 'S', ns_osc, seed=seeds[i])
         t1 = time.time()
 
         if kind == 'PDF':
-            background_int = SampleFromPDF(model_nom, 'INT', 'B', nb_int)
-            background_osc = SampleFromPDF(model_nom, 'OSC', 'B', nb_osc)
+            background_int = SampleFromPDF(model_nom, 'INT', 'B', nb_int, seed=seeds[i])
+            background_osc = SampleFromPDF(model_nom, 'OSC', 'B', nb_osc, seed=seeds[i])
             background = pd.concat([background_int, background_osc], ignore_index=True)
         elif kind == 'data':
-            background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seed, farsample=model.set)
+            background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seeds[i], farsample=model.set)
         else:
             raise ValueError('kind ' + str(kind) + ' unknown.')
 
@@ -156,7 +158,7 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
         # print(np.rad2deg(np.min(bint['sun_psi'])))
         # print(np.rad2deg(np.min(bosc['sun_psi'])))
 
-        sample_ = pd.concat([background, signal_int, signal_osc], ignore_index=True).sample(frac=1)
+        sample_ = pd.concat([background, signal_int, signal_osc], ignore_index=True).sample(frac=1, random_state=seeds[i])
         sample_ = sample_.drop([
             'azi', 'zen', 'sun_zen', 'sun_azi',
         ], axis=1)
@@ -212,11 +214,16 @@ def TSdist(outfile, model, tests, mu, livetime=None, N=None, ratio=None, kind='d
     if mode == 'return':
         return resultsdf
 
+    if model.outdir == 'default':
+        outfile = model.setpath+'/TS/TS_background'+'_{:05d}'.format(mu)+'.npy'
+    else:
+        outfile = model.outdir+'TS_background'+'_{:05d}'.format(mu)+'.npy'
+
     if div != 1:
         digit = rng.choice(range(100000))
-        SaveSample(resultsdf, outfile+'_{:05d}'.format(mu)+'_'+str(digit).zfill(6)+'.npy')
+        SaveSample(resultsdf, outfile.replace('.npy', '_'+str(digit).zfill(6)+'.npy'))
     else:
-        SaveSample(resultsdf, outfile+'_{:05d}'.format(mu)+'.npy')
+        SaveSample(resultsdf, outfile)
 
 def TSmin(model, livetime, seed=None):
 
@@ -296,7 +303,14 @@ def NumberOfSignalEvents(model, livetime, sample=None):    # Provide te in days.
     # print('total ns in {} days ({:.2e} years):\t{:.2e}'.format(te, te/365, ns))
     return livetime, ns
 
-def Sensitivity(model, livetime, numtests=500, points=None, append=False):
+def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=None):
+
+    if model.outdir == 'default':
+        outfile = model.setpath+'TS/TS_sensitivity.npy'
+        bgfile  = model.setpath+'TS/TS_background_00000.npy'
+    else:
+        outfile = model.outdir+'TS_sensitivity.npy'
+        bgfile  = model.outdir+'TS_background_00000.npy'
 
     ## Look for sensitivity file to append to:
     if (append==True) and ('TS_sensitivity.npy' not in os.listdir(model.setpath+'TS/')):
@@ -305,7 +319,7 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False):
 
     ## Load background TS and background median:
     try:
-        bg = LoadSample(model.setpath+'TS/TS_background_00000.npy')
+        bg = LoadSample(bgfile)
         bg['minTS'] = bg['minTS']*-1
         bg_median = np.median(np.sort(bg['minTS'].values))
         bg_ratio  = len(bg[bg['minTS']>bg_median])/len(bg)
@@ -322,7 +336,7 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False):
 
     mus, fracs = [], []
     for mu in testpoints:
-        df    = TSdist('', model, tests=numtests, mu=mu, livetime=livetime, mode='return', physical=False)
+        df    = TSdist(model, tests=numtests, mu=mu, livetime=livetime, mode='return', physical=False, seed=seed)
         tsmin = df['minTS'].values*-1
         mus.append(mu)
         fracs.append(len(tsmin[tsmin>bg_median])/len(tsmin))
@@ -330,7 +344,7 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False):
     if append == True:
         ## Use this if you want to improve your sensitivity with
         ## successive calculations:
-        rdfold = LoadSample(model.setpath+'TS/TS_sensitivity.npy')
+        rdfold = LoadSample(outfile)
         rdfnew = pd.DataFrame(data={'mu': mus, 'frac>bg_median': fracs})
         rdf = pd.concat([rdfold, rdfnew]).sort_values(['mu'])
     else:
@@ -359,7 +373,7 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False):
     # F    = interp1d(rdf['frac>bg_median'], rdf['mu'], kind='linear', fill_value='extrapolate')
     # ns90 = float(F(0.9))
 
-    SaveSample(rdf, model.setpath+'TS/TS_sensitivity.npy')
+    SaveSample(rdf, outfile)
 
     # ## Creating results dictionary:
     # setname = model.set.replace(' ', '')
@@ -392,7 +406,6 @@ def MRF(model, livetime):
             print('hello1')
             te, ns = NumberOfSignalEvents(model, livetime)
     else:
-        print('hello2')
         te, ns = NumberOfSignalEvents(model, livetime)
     # te, ns = NumberOfSignalEvents(model, livetime)
 

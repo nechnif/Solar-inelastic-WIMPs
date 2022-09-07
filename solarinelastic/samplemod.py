@@ -7,7 +7,7 @@ from .dataio import *
 from .solar import *
 
 
-def CreateCombined(n_int, n_osc, INT, OSC, seed=None, farsample=False):
+def CreateCombined(n_int, n_osc, INT, OSC, farsample=False, seed=None):
 
     if not hasattr(INT, 'df_exp'):
         INT.LoadEvents('exp')
@@ -26,14 +26,10 @@ def CreateCombined(n_int, n_osc, INT, OSC, seed=None, farsample=False):
 
     if len(dfint) < n_int:
         dfint = pd.concat([
-            dfint.sample(frac=1),
-            dfint.sample(n=n_int-len(dfint))
+            dfint, dfint.sample(n=n_int-len(dfint), random_state=seed)
         ])
     else:
-        if seed:
-            dfint = dfint.sample(n=n_int, random_state=seed)
-        else:
-            dfint = dfint.sample(n=n_int)
+        dfint = dfint.sample(n=n_int, random_state=seed)
     dfint = dfint.sort_values('logE')
 
     dfosc['azi'] = ScrambleAzi(len(dfosc), seed)
@@ -52,13 +48,13 @@ def CreateCombined(n_int, n_osc, INT, OSC, seed=None, farsample=False):
         'run', 'event', 'subevent', 'mjd'
     ]
     df = df.drop([d for d in drops if d in df.columns], axis=1)
+    # print(df)
+    # print(np.sum(df['sun_psi']))
     return df
 
 def ScrambleAzi(length, seed=None):
-    if seed:
-        rng = np.random.default_rng(seed)
-    else:
-        rng = np.random.default_rng()
+
+    rng = np.random.default_rng(seed)
     newazi = rng.random(length)*2*np.pi
     # print(newazi)
     return newazi
