@@ -1,9 +1,6 @@
 import sys
 import numpy as np
 import pandas as pd
-import astropy.coordinates as coord
-import astropy.units as u
-from astropy.time import Time
 
 from .dataio import *
 from .solar import *
@@ -29,7 +26,8 @@ class Selection(object):
 
         Attributes
         ----------
-        There's too many, have a look at the __init__ function.
+        config: module
+            Module file that contains all selection specific attributes.
 
         Methods
         -------
@@ -55,42 +53,38 @@ class Selection(object):
             sys.path.append('/'.join(configs[1].split('/')[:-1]))
             import osc_config as config
         else:
-            print('Name {} not recognized! Aborting.'.format(name))
+            print('Name {} not recognized!'.format(name))
             return -1
 
-        self.config = config
-        self.ID = config.id
-        self.name = config.name
-        self.sets = config.sets
         self.set = set
-        self.selectionpath = config.selectionpath
+        self.config = config
 
-        ## Bins:
-        self.psibins = config.psibins
-        self.ebins   = config.ebins
-        self.psifine = config.psifine
-        self.efine   = config.efine
+        attrs = [
+            ## Identification of event selection:
+            'id', 'name', 'selectionpath',
+            ## events and livetime:
+            'eventsper9years', 'eventsperday', 'frac', 'livetime', 'total',
+            ## All sets (nominal, systematics, ect.) in this selection:
+            'sets',
+            ## Cut angles:
+            'logEcut', 'psicut', 'psicut_farsample',
+            ## PDF and KDE specific attributes:
+            'ebins', 'efine', 'psibins', 'psifine',
+            'bandwidth', 'bounds_b', 'bounds_s', 'm', 'tag',
+            'kwargs_BPDF_KDE', 'kwargs_SPDF_KDE',
+            ## File locations:
+            'files',
+        ]
 
-        self.bounds_b = config.bounds_b
-        self.bounds_s = config.bounds_s
-
-        self.bw = config.bandwidth
-        self.kwargs_BPDF_KDE = config.kwargs_BPDF_KDE
-        self.kwargs_SPDF_KDE = config.kwargs_SPDF_KDE
-
-        self.total            = config.total
-        self.livetime         = config.livetime
-        self.eventsperday     = config.eventsperday
-        self.eventsper9years  = config.eventsper9years
-        self.frac             = config.frac
-        self.psicut           = config.psicut
-        self.psicut_farsample = config.psicut_farsample
-        self.logEcut          = config.logEcut
-
-        self.files = config.files
+        for attr in attrs:
+            setattr(self, attr, getattr(self.config, attr))
 
     def DetermineLivetime(self, te):
         ## Determine livetime in days.
+
+        import astropy.coordinates as coord
+        import astropy.units as u
+        from astropy.time import Time
 
         self.LoadEvents('background_events')
         bg = self.df_background_events.sort_values('mjd', axis=0)
@@ -167,10 +161,9 @@ class Selection(object):
             else:
                 rep = int(rep/div)
 
-        ## Load sun data (which was pre-calculated to save time and
-        ## and memory):
-        sunlocs = LoadSample(self.files['sun']+'sundir_2011_01.npy').sample(n=len(insample), replace=True)
-        ## convert distance earth-sun to [cm]:
+        ## Load sun data (which was pre-calculated to save time and and memory):
+        sunlocs = LoadSample(self.files['sun']).sample(n=len(insample), replace=True)
+        ## Convert distance earth-sun to [cm]:
         sunlocs['dist'] = sunlocs['dist']*1e5
 
         dfs = []
@@ -211,9 +204,9 @@ class Selection(object):
         if div != 1:
             rnd = np.random.default_rng()
             digit = rnd.choice(range(100000))
-            SaveSample(outsample, self.files['signal_events'].replace('SSSS', set).replace('.npy', '_{:06d}.npy'.format(digit)))
+            SaveSample(outsample, self.files['signal_events'].replace('SSSS', self.sets[self.set][0]).replace('.npy', '_{:06d}.npy'.format(digit)))
         else:
-            SaveSample(outsample, self.files['signal_events'].replace('SSSS', set))
+            SaveSample(outsample, self.files['signal_events'].replace('SSSS', self.sets[self.set][0]))
 
     def LoadEvents(self, samplename):
         df = LoadSample(self.files[samplename].replace('SSSS', self.sets[self.set][0]))
