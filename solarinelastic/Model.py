@@ -20,57 +20,61 @@ class Model(object):
 
         Parameters
         ----------
-        set: str
-            Dataset (nominal or any systematic set).
-        batch: str
-            The batch that contains the scenario.
-        name: str or float
-            Name of the scenario (mass of the DM candidate).
         allsets: dict
             Names and locations of all datasets used in the analysis.
-        loc: str
-            Location of the batches/scenarios.
+        batch: str
+            The batch that contains the scenario.
         configs: list
             Locations of the event selection config files.
+        loc: str
+            Location of the batches/scenarios.
         m: int
             Speed for KDE fine grid evaluation.
+        name: str or float
+            Name of the scenario (mass of the DM candidate).
+        outdir: str
+            Alternative output directory. For testing purposes.
+        set: str
+            Dataset (nominal or any systematic set).
 
         Attributes
         ----------
-        set: str
-            Dataset (nominal or any systematic set).
         batch: str
             The batch that contains the scenario.
-        name: str or float
-            Name of the scenario (mass of the DM candidate).
-        sets: dict
-            Names and locations of all datasets used in the analysis.
-        loc: str
-            Location of the batches/scenarios.
         configs: list
             Locations of the event selection config files.
-        m: int
-            Speed for KDE fine grid evaluation.
-        modelpath: str
-            Path to scenario.
-        setpath: str
-            Path where dataset specifict scenario results are stored.
-        mdm: float
-            Mass of the DM candidate.
-        input_parameters: dict
-            Scenario parameters.
-        observables: dict
-            Scenario observables.
         flux_e: ndarray
             Neutrino energy.
         flux_numu: ndarray
             Combined elastic and inelastic muon neutrino flux.
         flux_numubar: ndarray
             Combined elastic and inelastic muon antineutrino flux.
+        input_parameters: dict
+            Scenario parameters.
         INT: Selection
             Hight energy selection.
+        loc: str
+            Location of the batches/scenarios.
+        m: int
+            Speed for KDE fine grid evaluation.
+        mdm: float
+            Mass of the DM candidate.
+        modelpath: str
+            Path to scenario.
+        name: str or float
+            Name of the scenario (mass of the DM candidate).
+        observables: dict
+            Scenario observables.
         OSC: Selection
             Low energy selection.
+        outdir: str
+            Alternative output directory. For testing purposes.
+        set: str
+            Dataset (nominal or any systematic set).
+        setpath: str
+            Path where dataset specifict scenario results are stored.
+        sets: dict
+            Names and locations of all datasets used in the analysis.
 
         Methods
         -------
@@ -90,7 +94,7 @@ class Model(object):
 
     '''
 
-    def __init__(self, set, batch, name, allsets, loc, configs, m=8):
+    def __init__(self, set, batch, name, allsets, loc, configs, m=8, outdir='default'):
 
         self.set       = set
         self.sets      = allsets
@@ -102,6 +106,9 @@ class Model(object):
         self.mdm       = float(self.name)
         self.configs   = configs
         self.m         = m
+
+        ## Set the outdir if you want the results in an alternative directory:
+        self.outdir = outdir
 
         with open(self.modelpath+self.name+'.txt', 'r') as ls:
             point = eval(ls.readline())
@@ -163,122 +170,109 @@ class Model(object):
         for selection in ['INT', 'OSC']:
             SEL = getattr(self, selection)
 
+            if self.outdir != 'default':
+                dir_B = self.outdir
+                dir_S = self.outdir
+            else:
+                dir_B = os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')
+                dir_S = self.setpath+'PDFs/'
+
             ## Signal PDFs:
             Seval, _, _ = np.load(
-                self.setpath+'PDFs/'+selection+'_SPDF_KDE_evalfine.npy',
+                dir_S+selection+'_SPDF_KDE_evalfine.npy',
                 allow_pickle=True
             )
-            if selection+'_SPDF_KDE_evalfine-intp.pkl' not in os.listdir(self.setpath+'PDFs/'):
+            if selection+'_SPDF_KDE_evalfine-intp.pkl' not in os.listdir(dir_S):
                 self.IntpEvalfine(selection, 'S')
             Sintp = pickle.load(
-                open(self.setpath+'PDFs/'+selection+'_SPDF_KDE_evalfine-intp.pkl', 'rb')
+                open(dir_S+selection+'_SPDF_KDE_evalfine-intp.pkl', 'rb')
             )
             setattr(self, selection+'_SPDF_evalfine', Seval)
             setattr(self, selection+'_SPDF_evalintp', Sintp)
 
             ## Background PDFs:
             Beval, _, _ = np.load(
-                os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalfine'],
+                dir_B+SEL.files['BPDF_KDE_evalfine'],
                 allow_pickle=True
             )
             Bintp = pickle.load(
-                open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalintp'], 'rb')
+                open(dir_B+SEL.files['BPDF_KDE_evalintp'], 'rb')
             )
             setattr(self, selection+'_BPDF_evalfine',  Beval)
             setattr(self, selection+'_BPDF_evalintp',  Bintp)
 
-    def CreateBPDF(self, selection):
-        ### Create background PDFs.
-        ### Provide selection = 'INT' or 'OSC'.
+    def CreatePDF(self, selection, SB):
+        ### This function creates the PDFs. First as 2D histograms for
+        ### comparison purposes, then as KDEs for the actual PDFs. The
+        ### PDFs are saved as fine-grid evaluations of the KDEs, which
+        ### can be used for drawing random test samples.
+        ### selection = 'INT' or 'OSC'.
+        ### SB = 'S' or 'B' (for signal or background).
 
-        SEL = getattr(self, selection)
-
-        sample = LoadSample(SEL.files['background_events'])
-
-        if self.set=='farsample':
-            sample = sample[sample['sun_psi']>=SEL.psicut_farsample]
-            # print(np.min(np.rad2deg(sample['sun_psi'])))
-
-        ## Create histogram:
-        X = sample['sun_psi'].values
-        Y = sample['logE'].values
-        if 'weight' not in sample.columns:
-            sample['weight'] = np.ones(len(sample))
-        W = sample['weight'].values
-        xbins, ybins   = SEL.psibins,  SEL.ebins
-        bounds_b = SEL.bounds_b
-
-        hist = np.array(np.histogram2d(X, Y, bins=[xbins, ybins], weights=W, density=True), dtype=object)
-
-        ## Create KDE with own class, from values:
-        kernel = GaussianKDE(np.vstack([X, Y]), weights=W, bounds=bounds_b)
-        kernel.set_bandwidth(*SEL.bw)
-        # if SEL.bw:
-        # SEL.bw = kernel.bandwidth
-        print('background bandwidth:\t', SEL.bw)
-
-        ## Save everything:
-        if self.set == 'farsample':
-            print('Saving as far-sample BPDF.')
+        if self.outdir != 'default':
+            dir_B = self.outdir
+            dir_S = self.outdir
         else:
-            print('Saving as combined BPDF.')
-        np.save(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_histogram'], hist)
-        pickle.dump(kernel, open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE'], 'wb'))
-
-    def CreateSPDF(self, selection):
-        ### Create signal PDFs.
-        ### Provide selection = 'INT' or 'OSC'.
+            dir_B = os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')
+            dir_S = self.setpath+'PDFs/'
 
         SEL = getattr(self, selection)
+        print('Calculating {} {}PDF for set {}, scenario {} ...'.format(SEL.name, SB, self.set, self.name))
 
-        sample = LoadSample(SEL.files['signal_events'].replace('SSSS', SEL.sets[self.set][0]))
-        print('Calculating {} SPDF for set {}, scenario {} ...'.format(SEL.name, self.set, self.name))
+        if SB == 'B':
+            ## Load sample:
+            sample = LoadSample(SEL.files['background_events'])
+            if self.set == 'farsample':
+                sample = sample[sample['sun_psi']>=SEL.psicut_farsample]
 
-        ## Cut sample at maximum WIMP energy:
-        e_wimp = self.flux_e
-        sample = sample[sample['trueE'] <= np.max(e_wimp)]
+            ## Prepare histogram:
+            if 'weight' not in sample.columns:
+                sample['weight'] = np.ones(len(sample))
+            W = sample['weight'].values
+            bounds = SEL.bounds_b
 
-        ## Weight sample with WIMP flux:
-        sample.loc[sample['PDG']== 14, 'wimp'] = sample['weight']/SunSolidAngle(sample['dist'])*WIMPweight(self, sample['trueE'], 'nu')
-        sample.loc[sample['PDG']==-14, 'wimp'] = sample['weight']/SunSolidAngle(sample['dist'])*WIMPweight(self, sample['trueE'], 'nubar')
+        elif SB == 'S':
+            sample = LoadSample(SEL.files['signal_events'].replace('SSSS', SEL.sets[self.set][0]))
+
+            ## Cut sample at maximum WIMP energy:
+            e_wimp = self.flux_e
+            sample = sample[sample['trueE'] <= np.max(e_wimp)]
+
+            ## Weight sample with WIMP flux:
+            sample.loc[sample['PDG']== 14, 'wimp'] = sample['weight']/SunSolidAngle(sample['dist'])*WIMPweight(self, sample['trueE'], 'nu')
+            sample.loc[sample['PDG']==-14, 'wimp'] = sample['weight']/SunSolidAngle(sample['dist'])*WIMPweight(self, sample['trueE'], 'nubar')
+
+            ## Prepare histogram:
+            W = sample['wimp'].values
+            bounds = SEL.bounds_s
 
         ## Create histogram:
         X = sample['sun_psi'].values
         Y = sample['logE'].values
-        W = sample['wimp'].values
         xbins,  ybins  = SEL.psibins,  SEL.ebins
-        bounds_s = SEL.bounds_s
-
         hist = np.array(np.histogram2d(X, Y, bins=[xbins, ybins], weights=W, density=True), dtype=object)
 
         ## Create KDE with own class, from values:
-        kernel = GaussianKDE(np.vstack([X, Y]), weights=W, bounds=bounds_s)
-        kernel.set_bandwidth(*SEL.bw)
-        print('signal bandwidth:\t', SEL.bw)
+        KDE = GaussianKDE(np.vstack([X, Y]), weights=W, bounds=bounds)
+        KDE.set_bandwidth(*SEL.bandwidth)
+        print('bandwidth:\t', SEL.bandwidth)
 
-        ## Save everything:
-        np.save(self.setpath+'PDFs/'+SEL.name+'_SPDF_histogram.npy', hist)
-        pickle.dump(kernel, open(self.setpath+'PDFs/'+SEL.name+'_SPDF_KDE.pkl', 'wb'))
+        ## Saving the histogram (KDE object is not saved anymore because
+        ## takes a lot of space and is quick to re-create in case it is
+        ## needed again):
+        if SB == 'B':
+            np.save(dir_B+SEL.files['BPDF_histogram'], hist)
+            # pickle.dump(KDE, open(dir_B+SEL.files['BPDF_KDE'], 'wb'))
+        elif SB == 'S':
+            np.save(dir_S+SEL.name+'_SPDF_histogram.npy', hist)
+            # pickle.dump(KDE, open(dir_S+SEL.name+'_SPDF_KDE.pkl', 'wb'))
 
-    def FineGridEvaluation(self, selection, SB):
-        ### This function creates a fine-grid evaluation of the PDF KDEs,
-        ### with the purpose of drawing random test samples from it.
-        ### Provide selection = 'INT' or 'OSC'.
+        ##--- Perform finegrid evaluation: -----------------------------
+        name = SB+'PDF_KDE'
 
-        SEL = getattr(self, selection)
-        print('Calculating fine grid eval for {} {}PDF for set {}, scenario {} ...'.format(SEL.name, SB, self.set, self.name))
-
-        x, y = SEL.psifine, SEL.efine
-        # x = np.linspace(self.psibins[0],  self.psibins[-1],  len(self.psibins) *m-(m-1))
-        # y = np.linspace(self.ebins[0], self.ebins[-1], len(self.ebins)*m-(m-1))
+        x, y      = SEL.psifine, SEL.efine
         xx, yy    = np.meshgrid(x, y)
         positions = np.vstack([xx.ravel(), yy.ravel()])
-
-        name = SB+'PDF_KDE'
-        if SB=='B':
-            KDE = pickle.load(open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE'], 'rb'))
-        else:
-            KDE = pickle.load(open(self.setpath+'PDFs/'+SEL.name+'_'+name+'.pkl', 'rb'))
 
         eval = KDE.evaluate(positions, **getattr(SEL, 'kwargs_'+name))
         ## Dividing by the sum is necessary to make sure SPDF and
@@ -299,16 +293,16 @@ class Model(object):
         ## Save:
         if SB=='B':
             pickle.dump((eval, x, y),
-                open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalfine'], 'wb')
+                open(dir_B+SEL.files['BPDF_KDE_evalfine'], 'wb')
             )
         else:
             pickle.dump((eval, x, y),
-                open(self.setpath+'PDFs/'+SEL.name+'_'+name+'_evalfine.npy', 'wb')
+                open(dir_S+SEL.name+'_'+name+'_evalfine.npy', 'wb')
             )
 
         ## Interpolation:
         self.IntpEvalfine(selection, SB)
-        print('{} {} done.'.format(SEL.ID, name))
+        print('{} {} done.'.format(SEL.id, name))
 
     def IntpEvalfine(self, selection, SB):
         ### Interpolate fine grid evaluation.
@@ -317,21 +311,28 @@ class Model(object):
 
         SEL = getattr(self, selection)
 
+        if self.outdir != 'default':
+            dir_B = self.outdir
+            dir_S = self.outdir
+        else:
+            dir_B = os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')
+            dir_S = self.setpath+'PDFs/'
+
         ## Load fine grid eval:
         if SB=='B':
             eval, x, y = np.load(
-                os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalfine'],
+                dir_B+SEL.files['BPDF_KDE_evalfine'],
                 allow_pickle=True
             )
             F = RectBivariateSpline(x, y, eval)
-            pickle.dump(F, open(os.readlink(self.setpath+'PDFs/'+selection+'_BPDF')+SEL.files['BPDF_KDE_evalintp'], 'wb'))
+            pickle.dump(F, open(dir_B+SEL.files['BPDF_KDE_evalintp'], 'wb'))
         else:
             eval, x, y = np.load(
-                self.setpath+'PDFs/'+SEL.name+'_SPDF_KDE_evalfine.npy',
+                dir_S+SEL.name+'_SPDF_KDE_evalfine.npy',
                 allow_pickle=True
             )
             F = RectBivariateSpline(x, y, eval)
-            pickle.dump(F, open(self.setpath+'PDFs/'+SEL.name+'_SPDF_KDE_evalfine-intp.pkl', 'wb'))
+            pickle.dump(F, open(dir_S+SEL.name+'_SPDF_KDE_evalfine-intp.pkl', 'wb'))
 
     def LoadResults(self):
         if 'results.txt' in os.listdir(self.modelpath):
@@ -420,9 +421,3 @@ class Model(object):
         # print(results)
         self.results = results
         self.SaveResults()
-
-
-# ## Delete KDE.pkl object (it takes a huge amount of space and is
-# ## quick to re-create):
-# if self.files['SPDF_KDE'].split('/')[-1] in os.listdir(model.modelpath+'PDFs/'):
-#     os.remove(self.files['SPDF_KDE'].replace('$MODELPATH', model.modelpath))
