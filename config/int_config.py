@@ -1,7 +1,8 @@
 import numpy as np
 
 #--- bins --------------------------------------------------------------
-psicut  = np.deg2rad(10.0)
+psicut = np.deg2rad(10.0)
+psicut_farsample = np.deg2rad(7.11)
 logEcut = [2.0, 6.0]
 
 m = 8
@@ -45,28 +46,33 @@ selectionpath = '/data/user/rbusse/analysis/selections/int/'
 
 sets = {
     # systematic set      name                # of oversamples
-    'nominal'     : ['nominal',               25000],
-    'DOMeff0.90'  : ['21047_dom_090',         75000],
-    'DOMeff1.10'  : ['21047_dom_110',         70000],
-    'BIceAbs0.95' : ['21006_abs95',           30000],
-    'BIceAbs1.05' : ['pass2_abs105_ds21005',  30000],
-    'BIceSct0.95' : ['21004_scat95',          30000],
-    'BIceSct1.05' : ['pass2_scat105_ds21003', 30000],
-    'HIceP0-1'    : ['21047_holep0_-1.0',     50000],     # -1, 0(?) | -1, -0.05
-    'HIceP0+1'    : ['21047_holep0_+1.0',     50000],     # +1, 0(?) | +0.3, -0.05
+    'nominal'      : ['nominal',               25000],
+    'DOMeff0.90'   : ['21047_dom_090',         75000],
+    'DOMeff1.10'   : ['21047_dom_110',         70000],
+    'BIceAbs0.95'  : ['21006_abs95',           30000],
+    'BIceAbs1.05'  : ['pass2_abs105_ds21005',  30000],
+    'BIceSct0.95'  : ['21004_scat95',          30000],
+    'BIceSct1.05'  : ['pass2_scat105_ds21003', 30000],
+    'HIceP0-1'     : ['21047_holep0_-1.0',     50000],     # -1, 0(?) | -1, -0.05
+    'HIceP0+1'     : ['21047_holep0_+1.0',     50000],     # +1, 0(?) | +0.3, -0.05
+    'OSC-MCv02.05' : ['nominal',                   0],     # This only concerns the OSC selection
 }
 
 files = {
-    'sun'               : '/data/user/rbusse/analysis/sun/sun_positions/',
+    'sun'               : selectionpath+'sun/sundir_01.npy',
     'exp'               : selectionpath+'data/exp/INT_IC86_11-19_exp_vrbusse_scrambled-01.npy',
     'background_events' : selectionpath+'data/exp/oversample/INT_IC86_11-19_exp_vrbusse_scrambled-01_10deg_ov150.npy',
-    'BPDF_histogram'    : selectionpath+'backgroundPDF/INT_BPDF_histogram'+tag+'.npy',
-    'BPDF_KDE'          : selectionpath+'backgroundPDF/INT_BPDF_KDE'+tag+'.pkl',
-    'BPDF_KDE_evalfine' : selectionpath+'backgroundPDF/INT_BPDF_KDE_evalfine'+tag+'.npy',
-    'BPDF_KDE_evalintp' : selectionpath+'backgroundPDF/INT_BPDF_KDE_evalfine'+tag+'-intp.pkl',
+    'BPDF_histogram'    : 'INT_BPDF_histogram'+tag+'.npy',
+    'BPDF_KDE'          : 'INT_BPDF_KDE'+tag+'.pkl',
+    'BPDF_KDE_evalfine' : 'INT_BPDF_KDE_evalfine'+tag+'.npy',
+    'BPDF_KDE_evalintp' : 'INT_BPDF_KDE_evalfine'+tag+'-intp.pkl',
     'sim'               : selectionpath+'data/sim/IC79_IC86_MC_SSSS_vrbusse.npy',
     'signal_events'     : selectionpath+'data/sim/oversample/IC79_IC86_MC_SSSS_vrbusse_ov.npy',
     'Aeff'              : selectionpath+'Aeff/'+str(id)+'_Aeff.npy',
+
+    'farsample'         : selectionpath+'data/exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample.npy',
+    'farsample_ov'      : selectionpath+'data/exp/oversample/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample_ov.npy',
+    'unblinded'         : selectionpath+'data/exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg.npy',
 }
 
 #--- functions ---------------------------------------------------------
