@@ -17,4 +17,52 @@ Clone this repo and just execute the setup script:
 
 `setup.py install --user`
 
-Note that this code has dependencies in terms of data files and locations given in the analysis wiki. Access to IceCube software and computing infrastructure is required to use this software and to reproduce the analysis results.
+Note that this code runs with data files that are not provided here (the locations of these files are given in the analysis wiki). Access to IceCube software and computing infrastructure is required to use this software and to reproduce the analysis results.
+
+
+## Reproducing results
+
+This repository contains all necessary configuration files to run the analysis chain, provided that you have access to the data files listed in the analysis wiki. If the data file structure is changed, the selection configuration files
+
+`config/int_config.py`
+`config/osc_config.py`
+
+have to be modified accordingly. Otherwise, the only file to be manipulated is
+
+`tests/locations.json`
+
+which contains the locations of the data directory (should be `/data/ana/BSM/solar_inelastic_WIMPs/`) and the desired output directory, as well as the reproduction test script
+
+`repro_test.py`.
+
+You can run the analysis chain for a specific scenario (default 0849.4492 of batch 001 with the nominal data set) by simply executing the script. Note that the script may run for several hours! The following files will appear in the specified output directory:
+
+```
+INT_BPDF_histogram(0.0020-0.0200).npy
+INT_BPDF_KDE_evalfine(0.0020-0.0200)-intp.pkl
+INT_BPDF_KDE_evalfine(0.0020-0.0200).npy
+INT_SPDF_histogram.npy
+INT_SPDF_KDE_evalfine-intp.pkl
+INT_SPDF_KDE_evalfine.npy
+OSC_BPDF_histogram(0.0420-0.0200).npy
+OSC_BPDF_KDE_evalfine(0.0420-0.0200)-intp.pkl
+OSC_BPDF_KDE_evalfine(0.0420-0.0200).npy
+OSC_SPDF_histogram.npy
+OSC_SPDF_KDE_evalfine-intp.pkl
+OSC_SPDF_KDE_evalfine.npy
+TS_background_00000.npy
+TS_sensitivity.npy
+```
+
+Alternatively, you can pass a random state seed with
+
+`$ ./repro_test.py --seed [some integer]`
+
+to reproduce a specific result. Use `--seed 1000` to compare with the
+md5 checksums in
+
+`tests/001-0849.4492_seed1000_md5sums.txt`.
+
+If you want to test a different scenario, you need to modify the scenario initialization section within the script (should be self-explanatory). You find all available scenarios at
+
+`/data/ana/BSM/solar_inelastic_WIMPs/scenarios/`.
