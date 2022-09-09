@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import pandas as pd
+import warnings
 from scipy.optimize import minimize, curve_fit
 
 from .Model import Model
@@ -78,7 +79,8 @@ def LogLikelihood(ns, sample, model):
 
 def TestStatistics(ns, sample, model):
     N = len(sample)
-    TS_terms = -2 * np.log( ns/N * sample['SPDF_'+model.name].values/sample['BPDF'].values + (1-ns/N))
+    TS_terms = -2 * np.log( ns/N * sample['S/B'] + (1-ns/N))
+    # TS_terms = -2 * np.log( ns/N * sample['SPDF_'+model.name].values/sample['BPDF'].values + (1-ns/N))
     return np.sum(TS_terms)
 
 def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', div=1, physical=False, seed=None):
@@ -177,26 +179,45 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
             PDF(sample_, model_nom, 'INT', 'S')
             PDF(sample_, model_nom, 'OSC', 'B')
             PDF(sample_, model_nom, 'OSC', 'S')
+
+        sample_['S/B'] = sample_['SPDF_'+model.name].values/sample_['BPDF'].values
         t3 = time.time()
 
-        # check = InspectPDFs(sample_, model)
+        ## Determine lower minimizer bound (to avoid weird behaviour
+        ## in the log function of TS):
+        warnings.filterwarnings('error', category=RuntimeWarning)
+        testns = np.linspace(-300, 300, 61)
+        testTS = []
+        for t_ in testns:
+            try:
+                testTS.append(TestStatistics(t_, sample_, model))
+            except:
+                testTS.append(np.nan)
+        testTS = np.array(testTS)
+        warnings.filterwarnings('default', category=RuntimeWarning)
+        lowbound = testns[np.where(np.isfinite(testTS))][0]
+        # print(lowbound)
+        t4 = time.time()
+
         ## Minimize test statistic:
         if physical == True:
             popt = minimize(TestStatistics, mu_inj[i], args=(sample_, model), bounds=((0, N),))
         else:
-            popt = minimize(TestStatistics, mu_inj[i], args=(sample_, model), bounds=((-100, N),))
+            popt = minimize(TestStatistics, mu_inj[i], args=(sample_, model), bounds=((lowbound, N),))
+            # popt = minimize(TestStatistics, mu_inj[i], args=(sample_, model), bounds=((-100, N),))
         mu_     = popt.x[0]
         ns.append(mu_)
         ts_     = TestStatistics((0 if mu_<0 else mu_), sample_, model)
         TS.append(ts_)
         print('{}\t{}\t{}\t{:.3f}\t{:.3f}\t{:.3f}'.format(i, N, mu, mu_inj[i], mu_, ts_))
-        t4 = time.time()
+        t5 = time.time()
 
         # print(t1-t0)
         # print(t2-t1)
         # print(t3-t2)
         # print(t4-t3)
-        # print(t4-t0)
+        # print(t5-t4)
+        # print(t5-t0)
 
     endtime = time.time()
     print('This calculation took {:.2f} s ({:.2f} h).'.format(endtime-starttime, (endtime-starttime)/3600))
