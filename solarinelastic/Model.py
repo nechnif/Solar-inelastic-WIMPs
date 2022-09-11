@@ -376,7 +376,10 @@ class Model(object):
 
             if 'TS_sensitivity.npy' in os.listdir(self.modelpath+set[0]+'TS/'):
                 rdf = LoadSample(self.modelpath+set[0]+'TS/TS_sensitivity.npy')
-                mu90 = rdf['90%CL_ns'][0]
+                if '90%CL_ns' in rdf.columns:
+                    mu90 = rdf['90%CL_ns'][0]
+                else:
+                    mu90 = np.nan
             else:
                 mu90 = np.nan
 
