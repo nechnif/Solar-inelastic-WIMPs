@@ -17,9 +17,17 @@ from solarinelastic.frequentist import *
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--seed', nargs='?', default=None)
+    parser.add_argument('-s', '--seed',  nargs='?', default=None)
+    parser.add_argument('--batch', nargs='?', default='001')
+    parser.add_argument('--name',  nargs='?', default='0849.4492')
+    parser.add_argument('--set',   nargs='?', default='nominal')
     args = parser.parse_args()
-    inputargs = {'seed': (int(args.seed) if args.seed else None)}
+    inputargs = {
+        'seed'  : (int(args.seed) if args.seed else None),
+        'batch' : args.batch,
+        'name'  : args.name,
+        'set'   : args.set,
+    }
 
 with open('locations.json', 'r') as rf:
     config = json.load(rf)
@@ -33,6 +41,11 @@ osc_config = '../config/osc_config.py'
 
 ## Path to models, scenarios:
 scenarios  = config['DATAANA']+'scenarios/'
+
+## Create scenario-specific output dir:
+outdir_ = config['OUTDIR']+'{}-{}-{}/'.format(inputargs['batch'], inputargs['name'], inputargs['set'])
+if not os.path.exists(outdir_):
+    os.mkdir(outdir_)
 
 ## Data sets used in this analysis:
 sets = {
@@ -68,13 +81,13 @@ yrs9 = 3304     # smaller of the two lifetimes (INT) [days]
 
 ## Here we initialize the scenario:
 scen = Model(
-    set     = 'nominal',    # Change this to pick a different scenario
-    batch   = '001',        # Change this to pick a different scenario
-    name    = '0849.4492',  # Change this to pick a different scenario
+    set     = inputargs['set'],
+    batch   = inputargs['batch'],
+    name    = inputargs['name'],
     allsets = sets,
     loc     = scenarios,
     configs = [int_config, osc_config],
-    outdir  = config['OUTDIR']
+    outdir  = outdir_
 )
 print(scen.batch, scen.name, scen.set, scen.outdir)
 

@@ -61,8 +61,8 @@ Alternatively, you can pass a random state seed with
 to reproduce a specific result. Use `--seed 1000` to compare with the
 md5 checksums in
 
-`tests/001-0849.4492_seed1000_md5sums.txt`.
+`tests/001-0849.4492-nominal_seed1000_md5sums.txt`.
 
-If you want to test a different scenario, you need to modify the scenario initialization section within the script (should be self-explanatory). You find all available scenarios at
+If you want to test a different scenario (and/ or a data set that is not the nominal one), you can specify it with the arguments `--batch`, `--name`, and `--set`. You find all available scenarios at
 
 `/data/ana/BSM/solar_inelastic_WIMPs/scenarios/`.
