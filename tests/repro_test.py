@@ -39,13 +39,9 @@ print('Seed for random sampling is: {}'.format(inputargs['seed']))
 int_config = '../config/int_config.py'
 osc_config = '../config/osc_config.py'
 
-## Path to models, scenarios:
-scenarios  = config['DATAANA']+'scenarios/'
-
-## Create scenario-specific output dir:
-outdir_ = config['OUTDIR']+'{}-{}-{}/'.format(inputargs['batch'], inputargs['name'], inputargs['set'])
-if not os.path.exists(outdir_):
-    os.mkdir(outdir_)
+## Path to models, scenarios, outdir:
+scenarios = config['DATAANA']+'scenarios/'
+outdir_   = config['OUTDIR']+'{}-{}-{}/'.format(inputargs['batch'], inputargs['name'], inputargs['set'])
 
 ## Data sets used in this analysis:
 sets = {
@@ -91,6 +87,9 @@ scen = Model(
 )
 print(scen.batch, scen.name, scen.set, scen.outdir)
 
+## Create scenario-specific output dir:
+if not os.path.exists(outdir_):
+    os.mkdir(outdir_)
 
 ## The background PDFs are the same for all scenarios, but the signal
 ## PDFs are not (obviously). Since we use two different event selections,
