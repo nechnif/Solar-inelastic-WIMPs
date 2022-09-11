@@ -68,9 +68,9 @@ yrs9 = 3304     # smaller of the two lifetimes (INT) [days]
 
 ## Here we initialize the scenario:
 scen = Model(
-    set     = 'nominal',    # Change these to pick a different scenario
-    batch   = '001',        # Change these to pick a different scenario
-    name    = '0849.4492',  # Change these to pick a different scenario
+    set     = 'nominal',    # Change this to pick a different scenario
+    batch   = '001',        # Change this to pick a different scenario
+    name    = '0849.4492',  # Change this to pick a different scenario
     allsets = sets,
     loc     = scenarios,
     configs = [int_config, osc_config],

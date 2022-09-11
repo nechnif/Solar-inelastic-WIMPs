@@ -1,3 +1,4 @@
+import json
 import numpy as np
 
 #--- bins --------------------------------------------------------------
@@ -42,37 +43,45 @@ frac            = 0.952771
 
 #--- file locations ----------------------------------------------------
 name = 'OSC'
-selectionpath = '/data/user/rbusse/analysis/selections/oscnext/'
+with open('locations.json', 'r') as rf:
+    config = json.load(rf)
+selectionpath = config['DATAANA']+'data/OSC/'
 
 sets = {
-    # systematic set   name    # of oversamples
-    'nominal'      : ['0000',   150000],
-    'DOMeff0.90'   : ['0001',   150000],
-    'DOMeff1.10'   : ['0004',   150000],
-    'BIceAbs0.95'  : ['0517',   500000],
-    'BIceAbs1.05'  : ['0516',   500000],
-    'BIceSct0.95'  : ['0519',   500000],
-    'BIceSct1.05'  : ['0518',   500000],
-    'HIceP0-1'     : ['0300',   350000],     # -1, 0(?) | -1, -0.05
-    'HIceP0+1'     : ['0303',   350000],     # +1, 0(?) | +0.3, -0.05
-    'OSC-MCv02.05' : ['1122',   150000],
+    # nominal sets   name         # of oversamples
+    'nominal'      : ['0000',     150000],
+    'OSC-MCv02.05' : ['1122',     150000],
+
+    # systematic sets   name      # of oversamples
+    'DOMeff0.90'   : ['0001',     150000],
+    'DOMeff1.10'   : ['0004',     150000],
+    'BIceAbs0.95'  : ['0517',     500000],
+    'BIceAbs1.05'  : ['0516',     500000],
+    'BIceSct0.95'  : ['0519',     500000],
+    'BIceSct1.05'  : ['0518',     500000],
+    'HIceP0-1'     : ['0300',     350000],     # -1, 0(?) | -1, -0.05
+    'HIceP0+1'     : ['0303',     350000],     # +1, 0(?) | +0.3, -0.05
+
+    # other sets   name           # of oversamples
+    'farsample'    : ['0000farsample', 0],     # Contains half of nominal set (far-from-sun-events)
+
 }
 
 files = {
     'sun'               : selectionpath+'sun/sundir_01.npy',
-    'exp'               : selectionpath+'data/exp/oscNext_pisa_data_11-20_vrbusse_scrambled-01.npy',
-    'background_events' : selectionpath+'data/exp/oversample/oscNext_pisa_data_11-20_vrbusse_scrambled-01_ov8.npy',
+    'exp'               : selectionpath+'exp/oscNext_pisa_data_11-20_vrbusse_scrambled-01.npy',
+    'background_events' : selectionpath+'exp/oversample/oscNext_pisa_data_11-20_vrbusse_scrambled-01_ov8.npy',
     'BPDF_histogram'    : 'OSC_BPDF_histogram'+tag+'.npy',
     'BPDF_KDE'          : 'OSC_BPDF_KDE'+tag+'.pkl',
     'BPDF_KDE_evalfine' : 'OSC_BPDF_KDE_evalfine'+tag+'.npy',
     'BPDF_KDE_evalintp' : 'OSC_BPDF_KDE_evalfine'+tag+'-intp.pkl',
-    'sim'               : selectionpath+'data/sim/oscnext_pisa_genie_SSSS_vrbusse.npy',
-    'signal_events'     : selectionpath+'data/sim/oversample/oscnext_pisa_genie_SSSS_vrbusse_ov.npy',
+    'sim'               : selectionpath+'sim/oscnext_pisa_genie_SSSS_vrbusse.npy',
+    'signal_events'     : selectionpath+'sim/oversample/oscnext_pisa_genie_SSSS_vrbusse_ov.npy',
     'Aeff'              : selectionpath+'Aeff/'+str(id)+'_Aeff.npy',
 
-    'farsample'         : selectionpath+'data/exp/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED_farsample.npy',
-    'farsample_ov'      : selectionpath+'data/exp/oversample/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED_farsample_ov.npy',
-    'unblinded'         : selectionpath+'data/exp/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED.npy',
+    'farsample'         : selectionpath+'exp/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED_farsample.npy',
+    'farsample_ov'      : selectionpath+'exp/oversample/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED_farsample_ov.npy',
+    'unblinded'         : selectionpath+'exp/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED.npy',
 }
 
 #--- functions ---------------------------------------------------------

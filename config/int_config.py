@@ -1,3 +1,4 @@
+import json
 import numpy as np
 
 #--- bins --------------------------------------------------------------
@@ -42,11 +43,17 @@ frac            = 0.047229
 
 #--- file locations ----------------------------------------------------
 name = 'INT'
-selectionpath = '/data/user/rbusse/analysis/selections/int/'
+
+with open('locations.json', 'r') as rf:
+    config = json.load(rf)
+selectionpath = config['DATAANA']+'data/INT/'
 
 sets = {
-    # systematic set      name                # of oversamples
+    # nominal sets      name                # of oversamples
     'nominal'      : ['nominal',               25000],
+    'OSC-MCv02.05' : ['nominal',                   0],     # This only concerns the OSC selection
+
+    # systematic sets
     'DOMeff0.90'   : ['21047_dom_090',         75000],
     'DOMeff1.10'   : ['21047_dom_110',         70000],
     'BIceAbs0.95'  : ['21006_abs95',           30000],
@@ -55,24 +62,26 @@ sets = {
     'BIceSct1.05'  : ['pass2_scat105_ds21003', 30000],
     'HIceP0-1'     : ['21047_holep0_-1.0',     50000],     # -1, 0(?) | -1, -0.05
     'HIceP0+1'     : ['21047_holep0_+1.0',     50000],     # +1, 0(?) | +0.3, -0.05
-    'OSC-MCv02.05' : ['nominal',                   0],     # This only concerns the OSC selection
+
+    # other sets
+    'farsample'    : ['nominalfarsample',          0],     # Contains half of nominal set (far-from-sun-events)
 }
 
 files = {
     'sun'               : selectionpath+'sun/sundir_01.npy',
-    'exp'               : selectionpath+'data/exp/INT_IC86_11-19_exp_vrbusse_scrambled-01.npy',
-    'background_events' : selectionpath+'data/exp/oversample/INT_IC86_11-19_exp_vrbusse_scrambled-01_10deg_ov150.npy',
+    'exp'               : selectionpath+'exp/INT_IC86_11-19_exp_vrbusse_scrambled-01.npy',
+    'background_events' : selectionpath+'exp/oversample/INT_IC86_11-19_exp_vrbusse_scrambled-01_10deg_ov150.npy',
     'BPDF_histogram'    : 'INT_BPDF_histogram'+tag+'.npy',
     'BPDF_KDE'          : 'INT_BPDF_KDE'+tag+'.pkl',
     'BPDF_KDE_evalfine' : 'INT_BPDF_KDE_evalfine'+tag+'.npy',
     'BPDF_KDE_evalintp' : 'INT_BPDF_KDE_evalfine'+tag+'-intp.pkl',
-    'sim'               : selectionpath+'data/sim/IC79_IC86_MC_SSSS_vrbusse.npy',
-    'signal_events'     : selectionpath+'data/sim/oversample/IC79_IC86_MC_SSSS_vrbusse_ov.npy',
+    'sim'               : selectionpath+'sim/IC79_IC86_MC_SSSS_vrbusse.npy',
+    'signal_events'     : selectionpath+'sim/oversample/IC79_IC86_MC_SSSS_vrbusse_ov.npy',
     'Aeff'              : selectionpath+'Aeff/'+str(id)+'_Aeff.npy',
 
-    'farsample'         : selectionpath+'data/exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample.npy',
-    'farsample_ov'      : selectionpath+'data/exp/oversample/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample_ov.npy',
-    'unblinded'         : selectionpath+'data/exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg.npy',
+    'farsample'         : selectionpath+'exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample.npy',
+    'farsample_ov'      : selectionpath+'exp/oversample/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample_ov.npy',
+    'unblinded'         : selectionpath+'exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg.npy',
 }
 
 #--- functions ---------------------------------------------------------
