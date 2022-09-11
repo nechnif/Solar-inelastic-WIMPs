@@ -1,3 +1,4 @@
+import os
 import time
 import numpy as np
 import pandas as pd
@@ -327,14 +328,14 @@ def NumberOfSignalEvents(model, livetime, sample=None):    # Provide te in days.
 def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=None):
 
     if model.outdir == 'default':
-        outfile = model.setpath+'TS/TS_sensitivity.npy'
-        bgfile  = model.setpath+'TS/TS_background_00000.npy'
+        outdir = model.setpath+'TS/'
     else:
-        outfile = model.outdir+'TS_sensitivity.npy'
-        bgfile  = model.outdir+'TS_background_00000.npy'
+        outdir = model.outdir
+    outfile = outdir+'TS_sensitivity.npy'
+    bgfile  = outdir+'TS_background_00000.npy'
 
     ## Look for sensitivity file to append to:
-    if (append==True) and ('TS_sensitivity.npy' not in os.listdir(model.setpath+'TS/')):
+    if (append==True) and ('TS_sensitivity.npy' not in os.listdir(outdir)):
         print('Could not find sensitivity file to append to.')
         return -1
 
@@ -345,7 +346,6 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=N
         bg_median = np.median(np.sort(bg['minTS'].values))
         bg_ratio  = len(bg[bg['minTS']>bg_median])/len(bg)
         rdfbg = pd.DataFrame(data={'mu':[0], 'frac>bg_median':[bg_ratio]})
-        # print('{:.2f} {:.2f}'.format(bg_median, bg_ratio))
     except:
         bg_median, bg_ratio, rdfbg = 0.0, None, None
 
@@ -372,13 +372,37 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=N
         ## Use this if you want to start fresh (default):
         rdf  = pd.DataFrame(data={'mu': mus, 'frac>bg_median': fracs})
 
-    ## Include backround-only TS (if there is one):
-    if (0 not in rdf['mu'].values) and bg_ratio:
-        rdf = pd.concat([rdf, rdfbg]).sort_values('mu')
-    elif bg_ratio:
-        rdf.loc[rdf['mu']==0, 'frac>bg_median'] = bg_ratio
+    SaveSample(rdf, outfile)
+    return 0
+
+def SensitivityFit(model):
+
+    if model.outdir == 'default':
+        outdir = model.setpath+'TS/'
     else:
-        pass
+        outdir = model.outdir
+    outfile = outdir+'TS_sensitivity.npy'
+    bgfile  = outdir+'TS_background_00000.npy'
+
+    ## Look for sensitivity file to append to:
+    if 'TS_sensitivity.npy' not in os.listdir(outdir):
+        print('Could not find sensitivity file.')
+        return -1
+
+    ## Load background TS and background median:
+    try:
+        bg = LoadSample(bgfile)
+        bg['minTS'] = bg['minTS']*-1
+        bg_median = np.median(np.sort(bg['minTS'].values))
+        bg_ratio  = len(bg[bg['minTS']>bg_median])/len(bg)
+        rdfbg = pd.DataFrame(data={'mu':[0], 'frac>bg_median':[bg_ratio]})
+    except:
+        bg_median, bg_ratio, rdfbg = 0.0, None, None
+
+    ## Load sensitivity file and add background TS:
+    rdf = LoadSample(outfile)
+    rdf = rdf[rdf['mu']>0]
+    rdf = pd.concat([rdf, rdfbg]).sort_values('mu')
 
     ## Fit a saturation function to the data points:
     def fitf(x, a, b):
@@ -394,19 +418,8 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=N
     # F    = interp1d(rdf['frac>bg_median'], rdf['mu'], kind='linear', fill_value='extrapolate')
     # ns90 = float(F(0.9))
 
+    # print(rdf)
     SaveSample(rdf, outfile)
-
-    # ## Creating results dictionary:
-    # setname = model.set.replace(' ', '')
-    # results = {
-    #     'TS0_median_'+setname   : bg_median,
-    #     '90%CL_ns_'+setname     : ns90,
-    #     'te'                    : livetime,
-    # }
-    # model.LoadResults()
-    # for key, value in results.items():
-    #     model.results[key] = value
-    # model.SaveResults()
     return 0
 
 def MRF(model, livetime):
