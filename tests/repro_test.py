@@ -41,7 +41,7 @@ osc_config = '../config/osc_config.py'
 
 ## Path to models, scenarios, outdir:
 scenarios = config['DATAANA']+'scenarios/'
-outdir_   = config['OUTDIR']+'{}-{}-{}/'.format(inputargs['batch'], inputargs['name'], inputargs['set'])
+outdir_   = config['OUTDIR']+'{}-{}-{}_seed{}/'.format(inputargs['batch'], inputargs['name'], inputargs['set'], str(inputargs['seed']))
 
 ## Data sets used in this analysis:
 sets = {
