@@ -3,7 +3,6 @@ import numpy as np
 
 #--- bins --------------------------------------------------------------
 psicut = np.deg2rad(10.0)
-psicut_farsample = np.deg2rad(7.11)
 logEcut = [2.0, 6.0]
 
 m = 8
@@ -11,6 +10,8 @@ psibins = np.linspace(0,          psicut,     20)
 ebins   = np.linspace(logEcut[0], logEcut[1], 20)
 psifine = np.linspace(psibins[0], psibins[-1], len(psibins)*m-(m-1))
 efine   = np.linspace(ebins[0],   ebins[-1],   len(ebins)  *m-(m-1))
+
+psicut_farsample = psifine[108]
 
 bounds_b = [[-np.inf,         np.min(ebins)],
             [np.max(psibins), np.inf       ]]
@@ -33,13 +34,13 @@ kwargs_SPDF_KDE = {
 # Identifier:
 id = 1.0
 
-total           = 6592
+total           = 6557
 livetime        = 3304
-eventsperday    = 1.9950
-eventsper9years = 6589.3533
+eventsperday    = 1.9846
+eventsper9years = 6557
 ## Fraction of total analysis sample (obtained by
 ## int_events/(int_events+oscevents) from the exp. datasets):
-frac            = 0.047229
+frac            = 0.047008
 
 #--- file locations ----------------------------------------------------
 name = 'INT'
@@ -64,13 +65,15 @@ sets = {
     'HIceP0+1'     : ['21047_holep0_+1.0',     50000],     # +1, 0(?) | +0.3, -0.05
 
     # other sets
-    'farsample'    : ['nominalfarsample',          0],     # Contains half of nominal set (far-from-sun-events)
+    'farsample'    : ['farsample',                 0],     # Contains half of nominal set (far-from-sun-events)
+    'unblinded'    : ['unblinded',                 0],     # Unscrambled set
 }
 
 files = {
     'sun'               : selectionpath+'sun/sundir_01.npy',
     'exp'               : selectionpath+'exp/INT_IC86_11-19_exp_vrbusse_scrambled-01.npy',
-    'background_events' : selectionpath+'exp/oversample/INT_IC86_11-19_exp_vrbusse_scrambled-01_10deg_ov150.npy',
+    'background_ov'     : selectionpath+'exp/oversample/INT_IC86_11-19_exp_vrbusse_scrambled-01_10deg_ov150.npy',
+    'background_events' : selectionpath+'exp/oversample/background.npy',
     'BPDF_histogram'    : 'INT_BPDF_histogram'+tag+'.npy',
     'BPDF_KDE'          : 'INT_BPDF_KDE'+tag+'.pkl',
     'BPDF_KDE_evalfine' : 'INT_BPDF_KDE_evalfine'+tag+'.npy',
@@ -80,7 +83,6 @@ files = {
     'Aeff'              : selectionpath+'Aeff/'+str(id)+'_Aeff.npy',
 
     'farsample'         : selectionpath+'exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample.npy',
-    'farsample_ov'      : selectionpath+'exp/oversample/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg-farsample_ov.npy',
     'unblinded'         : selectionpath+'exp/INT_IC86_11-19_exp_vrbusse_UNSCRAMBLED_10deg.npy',
 }
 

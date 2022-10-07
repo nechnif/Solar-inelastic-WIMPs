@@ -55,8 +55,10 @@ sets = {
     'BIceSct1.05'  : ['sys-BIceSct1.05/', 'BIce sct 1.05'],
     'HIceP0-1'     : ['sys-HIceP0-1/',    'HIce p0 -1'],
     'HIceP0+1'     : ['sys-HIceP0+1/',    'HIce p0 +1'],
-    'farsample'    : ['farsample/',       'far sample'],
+    'OSC-MCv02.02' : ['OSC-MCv02.02/',    'OSC-MC v02.02'],
     'OSC-MCv02.05' : ['OSC-MCv02.05/',    'OSC-MC v02.05'],
+    'farsample'    : ['farsample/',       'far sample'],
+    'unblinded'    : ['nominal/',         'unblinded'],
 }
 
 ## Livetime:

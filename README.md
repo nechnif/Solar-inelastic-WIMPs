@@ -51,7 +51,7 @@ OSC_SPDF_histogram.npy
 OSC_SPDF_KDE_evalfine-intp.pkl
 OSC_SPDF_KDE_evalfine.npy
 TS_background_00000.npy
-TS_sensitivity.npy
+sensitivity.npy
 ```
 
 Alternatively, you can pass a random state seed with

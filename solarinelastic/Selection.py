@@ -108,19 +108,19 @@ class Selection(object):
             total, livetime, total/livetime, te/365, evp9y)
         )
 
-    def OversampleBackground(self, rep):
+    def OversampleBackground(self, rep, outfile='default'):
         ## Background oversampling is needed to smooth out scrambling
         ## artefacts and to avoid empty bins in the background PDFs.
 
         insample = LoadSample(self.files['exp'])
-        if self.ID == 0.0:
+        if self.id == 0.0:
             drops = [
                 'pass_lowup', 'pass_muon',
                 'run', 'event', 'subevent',
                 'recotime',
             ]
             insample = insample.drop([d for d in drops if d in insample.columns], axis=1)
-        elif self.ID == 1.0:
+        elif self.id == 1.0:
             drops = [
                 'ra', 'dec',
                 'run', 'event', 'subevent',
@@ -146,7 +146,12 @@ class Selection(object):
         outsample['weight'] = np.ones(len(outsample))/float(rep)
         print(outsample)
         # print(np.rad2deg(min(df_['zen'])), np.rad2deg(max(df_['zen'])))
-        SaveSample(outsample, self.files['background_events'])
+
+        if outfile=='default':
+            outfile = self.files['background_ov']
+        else:
+            outfile = outfile
+        SaveSample(outsample, outfile)
 
     def OversampleSignal(self, div=1):
         ## Signal oversampling is needed for sufficient statistics.

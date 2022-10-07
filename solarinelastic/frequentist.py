@@ -29,6 +29,14 @@ def PDF(sample, model, selection, SB):
     for i in range(len(X)):
         eval.append(F(X[i], Y[i])[0][0])
 
+    ## Account for farsample PDF correction factors when applicable:
+    if model.set == 'farsample':
+        model.LoadFarsampleFactors()
+        k = model.farfactors[selection+'-'+SB]
+    else:
+        k = 1.0
+    eval = np.array(eval)*k
+
     sample.loc[sample['sel']==SEL.id, name] = eval
 
     return sample
@@ -63,6 +71,32 @@ def SampleFromPDF(model, selection, SB, N, seed=None):
     pdfsample['sel'] = np.ones(len(pdfsample)) * SEL.id
     return pdfsample
 
+def NumberOfSignalEvents(model, livetime, sample=None):    # Provide te in days.
+    ### Calculate the number of signal events for the current set.
+
+    day_s = 86400.        # day in seconds
+    te_s  = livetime * day_s
+
+    if not sample:
+        sample = AllSignalsWeighted(model)
+        ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
+    else:
+        if 'dist' not in sample.columns:
+            ## This is only for test purposes!
+            print('WARNING: No "dist" column found. Are you sure this is a signal sample?')
+            ns = np.sum(sample['wimp'])*te_s
+        else:
+            ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
+
+    np.savetxt(
+        model.setpath+'te_ns.txt',
+        np.array([[livetime], [ns]]).T, fmt='%.4e',
+        header='livetime [days]\tns [per livetime]'
+    )
+
+    # print('total ns in {} days ({:.2e} years):\t{:.4e}'.format(livetime, livetime/365, ns))
+    return livetime, ns
+
 def Likelihood(ns, sample, model):
     N = len(sample)
     L = np.prod(
@@ -81,20 +115,36 @@ def LogLikelihood(ns, sample, model):
 def TestStatistics(ns, sample, model):
     N = len(sample)
     TS_terms = -2 * np.log( ns/N * sample['S/B'] + (1-ns/N))
-    # TS_terms = -2 * np.log( ns/N * sample['SPDF_'+model.name].values/sample['BPDF'].values + (1-ns/N))
-    return np.sum(TS_terms)
+    # TS = np.sum(TS_terms)
+    ## Sorting is important to make the sum numerically stable:
+    TS = np.sum(np.sort(TS_terms)[::-1])
+    return TS
 
-def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mode='normal', div=1, physical=False, seed=None):
+def TSdist(model, tests, mu, kind='data', livetime=None, N=None, ratio=None, mode='save', div=1, physical=False, seed=None):
     ### If ratio, provide as e.g. [1, 0]. Sum of ratio[0] and ratio[1]
     ### needs to be 1, and N is mandatory.
     ### If livetime, N is calculated automatically.
 
-    if livetime and (N or ratio):
-        raise ValueError('Provide either livetime, or N and ratio, not both.')
-    if not livetime and not (N and ratio):
-        raise ValueError('Values for both N and ratio are required')
+    if kind == 'unblinded':
+        ## For the unblinded set, N is set automatically; livetime and ratio are ignored.
+        print('WARNING: Using unblinded dataset!')
+        livetime, ratio = None, None
+        N_int, N_osc = np.rint(model.INT.total), np.rint(model.OSC.total)
+        # N_int, N_osc = np.rint(model.INT.eventsper9years), np.rint(model.OSC.eventsper9years)
+        N = int(N_int+N_osc)
+        ratio_int, ratio_osc = model.INT.frac, model.OSC.frac
+    elif livetime and not (N and ratio):
+        N_int, N_osc = np.rint(livetime*model.INT.eventsperday), np.rint(livetime*model.OSC.eventsperday)
+        N = int(N_int+N_osc)
+        ratio_int, ratio_osc = model.INT.frac, model.OSC.frac
+    elif not livetime and (N and ratio):
+        N_int, N_osc = N*ratio[0], N*ratio[1]
+        ratio_int, ratio_osc = ratio[0], ratio[1]
+    else:
+        raise ValueError('Please provide <livetime> OR <N and ratio>.')
 
-    ## We pre-load the experimental set to save time in the loop:
+    ## We pre-load the experimental set to save time in the loop
+    ## (only relevant if kind in ['data', 'samedata']):
     model.INT.LoadEvents('exp')
     model.OSC.LoadEvents('exp')
 
@@ -109,15 +159,6 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
 
     tests = int(tests/div)
     mu_inj, TS, ns, TS_corr, ns_corr = [], [], [], [], []
-
-    if livetime:
-        # N = int(np.rint(livetime*INT.eventsperday)+np.rint(livetime*OSC.eventsperday))
-        N_int, N_osc = np.rint(livetime*model.INT.eventsperday), np.rint(livetime*model.OSC.eventsperday)
-        N = int(N_int+N_osc)
-        ratio_int, ratio_osc = model.INT.frac, model.OSC.frac
-    else:
-        N_int, N_osc = N*ratio[0], N*ratio[1]
-        ratio_int, ratio_osc = ratio[0], ratio[1]
 
     starttime = time.time()
 
@@ -139,7 +180,6 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
             mu_inj.append(ns_int+ns_osc)
         nb_int = int(N_int) - ns_int
         nb_osc = int(N_osc) - ns_osc
-        # print(ns_int, ns_osc)
 
         t0 = time.time()
         ## Injecting signals from the given sample:
@@ -148,18 +188,48 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
         t1 = time.time()
 
         if kind == 'PDF':
+            ## This is for test purposes only. Samples the background
+            ## from the background PDFs instead of using data.
             background_int = SampleFromPDF(model_nom, 'INT', 'B', nb_int, seed=seeds[i])
             background_osc = SampleFromPDF(model_nom, 'OSC', 'B', nb_osc, seed=seeds[i])
             background = pd.concat([background_int, background_osc], ignore_index=True)
+        elif (kind == 'unblinded') and (model.set == 'unblinded'):
+            ## This is the mode for the unblinded set. Uses the same
+            ## UNSCRAMBLED background for each test, and only variates
+            ## the signal portion.
+            model.INT.LoadEvents('unblinded')
+            model.OSC.LoadEvents('unblinded')
+            if mu==0:
+                ## Use *all* events when no signal is inserted (this
+                ## ensures a correct and reproducible TS value):
+                int_ = model.INT.df_unblinded
+                osc_ = model.OSC.df_unblinded
+            else:
+                ## When signal is injected, subtract the according number
+                ## of background events:
+                int_ = model.INT.df_unblinded.sample(n=nb_int)
+                osc_ = model.OSC.df_unblinded.sample(n=nb_osc)
+            background = pd.concat([int_, osc_])
+        elif (kind == 'samedata') and (isinstance(seed, int)):
+            ## This is to test the distribution of mu90 (similar to the
+            ## above but with the same SCRAMBLDED background):
+            background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seed, farsample=model.set)
         elif kind == 'data':
+            ## This is the normal mode to create background TS and sensitivities:
             background = CreateCombined(nb_int, nb_osc, model.INT, model.OSC, seed=seeds[i], farsample=model.set)
         else:
-            raise ValueError('kind ' + str(kind) + ' unknown.')
+            raise ValueError((
+                'No seed provided for kind=="samedata".' if kind=='samedata' else
+                'Either kind="{}" unknown'
+                'or not allowed in combination with set="{}".').format(kind, model.set))
 
-        bint = background[background['sel']==1]
-        bosc = background[background['sel']==0]
-        # print(np.rad2deg(np.min(bint['sun_psi'])))
-        # print(np.rad2deg(np.min(bosc['sun_psi'])))
+        # print(background.sort_values('sun_psi'))
+        # bint = background[background['sel']==1]
+        # bosc = background[background['sel']==0]
+        # print(bint.sort_values('sun_psi'))
+        # print(bosc.sort_values('sun_psi'))
+        # # print(np.rad2deg(np.min(bint['sun_psi'])))
+        # # print(np.rad2deg(np.min(bosc['sun_psi'])))
 
         sample_ = pd.concat([background, signal_int, signal_osc], ignore_index=True).sample(frac=1, random_state=seeds[i])
         sample_ = sample_.drop([
@@ -172,9 +242,9 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
         ## using the far-sample:
         if model.set=='farsample':
             PDF(sample_, model,     'INT', 'B')
-            PDF(sample_, model_nom, 'INT', 'S')
+            PDF(sample_, model,     'INT', 'S')
             PDF(sample_, model,     'OSC', 'B')
-            PDF(sample_, model_nom, 'OSC', 'S')
+            PDF(sample_, model,     'OSC', 'S')
         else:
             PDF(sample_, model_nom, 'INT', 'B')
             PDF(sample_, model_nom, 'INT', 'S')
@@ -182,7 +252,11 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
             PDF(sample_, model_nom, 'OSC', 'S')
 
         sample_['S/B'] = sample_['SPDF_'+model.name].values/sample_['BPDF'].values
+        # sample_ = sample_.sort_values('S/B')
         t3 = time.time()
+
+        # ## For testing purposes:
+        # SaveSample(sample_, '/data/user/rbusse/analysis/verifications/220921_minimizer-farsample/testsample-'+str(i).zfill(2)+'.npy')
 
         ## Determine lower minimizer bound (to avoid weird behaviour
         ## in the log function of TS):
@@ -210,7 +284,7 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
         ns.append(mu_)
         ts_     = TestStatistics((0 if mu_<0 else mu_), sample_, model)
         TS.append(ts_)
-        print('{}\t{}\t{}\t{:.3f}\t{:.3f}\t{:.3f}'.format(i, N, mu, mu_inj[i], mu_, ts_))
+        print('{}\t{}\t{}\t{:.3f}\t{:.3f}\t{:.6f}'.format(i, N, mu, mu_inj[i], mu_, ts_))
         t5 = time.time()
 
         # print(t1-t0)
@@ -233,13 +307,13 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
     ]])
     resultsdf = pd.DataFrame(data=results.T, columns=cols)
 
-    if mode == 'return':
+    if (model.set=='unblinded') or (mode=='return'):
         return resultsdf
 
     if model.outdir == 'default':
-        outfile = model.setpath+'/TS/TS_background'+'_{:05d}'.format(mu)+'.npy'
+        outfile = model.setpath+'/TS/TS_'+('background_' if mu==0 else '')+'{:05d}'.format(mu)+'.npy'
     else:
-        outfile = model.outdir+'TS_background'+'_{:05d}'.format(mu)+'.npy'
+        outfile = model.outdir+'TS_'+('background_' if mu==0 else '')+'{:05d}'.format(mu)+'.npy'
 
     if div != 1:
         digit = rng.choice(range(100000))
@@ -247,132 +321,64 @@ def TSdist(model, tests, mu, livetime=None, N=None, ratio=None, kind='data', mod
     else:
         SaveSample(resultsdf, outfile)
 
-def TSmin(model, livetime, seed=None):
-
-    ## This only makes sense with the nominal set:
-    if model.set != 'nominal':
-        print('Please use nominal set!')
-        return -1
-
-    n_int = int(np.rint(livetime*model.INT.eventsperday))
-    n_osc = int(np.rint(livetime*model.OSC.eventsperday))
-    if seed:
-        sample = CreateCombined(n_int, n_osc, INT=model.INT, OSC=model.OSC, seed=seed)    # good seeds: 1007
-    else:
-        sample = CreateCombined(n_int, n_osc, INT=model.INT, OSC=model.OSC)
-    N = len(sample)
-
-    model.LoadPDFs()
-    PDF(sample, model, 'INT', 'B')
-    PDF(sample, model, 'INT', 'S')
-    PDF(sample, model, 'OSC', 'B')
-    PDF(sample, model, 'OSC', 'S')
-
-    ## The value of ns that maximizes the LogLikelihood also maximizes the
-    ## test statistics. The test statistics is way easier to maximize (or
-    ## minimize in this case) and not so prone to be stuck in local minima,
-    ## that's why we're using the test statistics here.
-    popt = minimize(TestStatistics, 0, args=(sample, model), bounds=((-100, N),))
-    # popt = basinhopping(TestStatistics, 0, minimizer_kwargs={'args': (sample, model)}, niter=3)
-    TSmin_ns = popt.x[0]
-    TSmin    = TestStatistics((0 if TSmin_ns<0 else TSmin_ns), sample, model)
-    # popt = basinhopping(LogLikelihood, 0, minimizer_kwargs={'args': (sample, model)}, seed=1111)
-    # nsmin = popt.x[0]
-    # Lmin  = LogLikelihood(nsmin, sample, model)
-    print('{} {} nsmin, logLmin: {:.4f}, {:4f}'.format(model.batch, model.name, TSmin_ns, TSmin))
-
-    np.savetxt(
-        model.setpath+'TSmin.txt',
-        np.array([[TSmin], [TSmin_ns]]).T, fmt='%.4e',
-        header='TSmin\tTSmin_ns'
-    )
-
-    # model.LoadResults()
-    # model.results['TSmin']    = TSmin
-    # model.results['TSmin_ns'] = TSmin_ns
-    # model.SaveResults()
-    # model.UpdateResults()
     return 0
 
-def NumberOfSignalEvents(model, livetime, sample=None):    # Provide te in days.
-    ### Calculate the number of signal events for the current set.
-
-    day_s = 86400.        # day in seconds
-    te_s  = livetime * day_s
-
-    if not sample:
-        sample = AllSignalsWeighted(model)
-        ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
-    else:
-        if 'dist' not in sample.columns:
-            ## This is only for test purposes!
-            print('WARNING: No "dist" column found. Are you sure this is a signal sample?')
-            ns = np.sum(sample['wimp'])*te_s
-        else:
-            ns = np.sum(sample['wimp']/SunSolidAngle(sample['dist']))*te_s
-
-    np.savetxt(
-        model.setpath+'te_ns.txt',
-        np.array([[livetime], [ns]]).T, fmt='%.4e',
-        header='livetime [days]\tns [per livetime]'
-    )
-
-    # model.LoadResults()
-    # model.results['te'] = livetime
-    # model.results['ns_te '+model.set] = ns
-    # model.SaveResults()
-
-    # print('total ns in {} days ({:.2e} years):\t{:.2e}'.format(te, te/365, ns))
-    return livetime, ns
-
 def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=None):
+
+    if model.set == 'farsample':
+        print('Sensitivity calculation not available for farsample set.')
+        return -1
 
     if model.outdir == 'default':
         outdir = model.setpath+'TS/'
     else:
         outdir = model.outdir
-    outfile = outdir+'TS_sensitivity.npy'
+
     bgfile  = outdir+'TS_background_00000.npy'
+    if model.set == 'unblinded':
+        outfile = outdir+'upperlimit.npy'
+    else:
+        outfile = outdir+'sensitivity.npy'
 
     ## Look for sensitivity file to append to:
-    if (append==True) and ('TS_sensitivity.npy' not in os.listdir(outdir)):
+    if (append==True) and (outfile.split('/')[-1] not in os.listdir(outdir)):
         print('Could not find sensitivity file to append to.')
         return -1
-
-    ## Load background TS and background median:
-    try:
-        bg = LoadSample(bgfile)
-        bg['minTS'] = bg['minTS']*-1
-        bg_median = np.median(np.sort(bg['minTS'].values))
-        bg_ratio  = len(bg[bg['minTS']>bg_median])/len(bg)
-        rdfbg = pd.DataFrame(data={'mu':[0], 'frac>bg_median':[bg_ratio]})
-    except:
-        bg_median, bg_ratio, rdfbg = 0.0, None, None
 
     ## Points for fit:
     if isinstance(points, (list, np.ndarray)):
         testpoints = points
+    elif model.set == 'unblinded':
+        df0 = TSdist(model, tests=1, mu=0, kind='unblinded', mode='return')
+        bgTS, bgns = np.abs(df0['minTS'][0]), df0['ns'][0]
+        if bgns >= -0.1:
+            testpoints = [1., 2., 3., 5., 10., 20.]
+        else:
+            testpoints = [10., 20., 30., 55., 85.]
     else:
-        testpoints = [20., 30., 55., 85.]
+        testpoints = [10., 20., 30., 55., 85.]
 
-    mus, fracs = [], []
+    kind = ('unblinded' if model.set=='unblinded' else 'data')
+    mus, fracs, dfs = [], [], []
     for mu in testpoints:
-        df    = TSdist(model, tests=numtests, mu=mu, livetime=livetime, mode='return', physical=False, seed=seed)
+        df    = TSdist(model, tests=numtests, mu=mu, livetime=livetime, kind=kind, mode='return', physical=False, seed=seed)
         tsmin = df['minTS'].values*-1
-        mus.append(mu)
-        fracs.append(len(tsmin[tsmin>bg_median])/len(tsmin))
+        dfs.append(df)
 
+    bigdf = pd.concat(dfs)
+
+    ## Save the full calculation for mu90 distribution plots:
     if append == True:
         ## Use this if you want to improve your sensitivity with
         ## successive calculations:
-        rdfold = LoadSample(outfile)
-        rdfnew = pd.DataFrame(data={'mu': mus, 'frac>bg_median': fracs})
-        rdf = pd.concat([rdfold, rdfnew]).sort_values(['mu'])
+        olddf = LoadSample(outfile)
+        newdf = pd.concat([olddf, bigdf])
+        print(newdf)
+        SaveSample(newdf, outfile)
     else:
         ## Use this if you want to start fresh (default):
-        rdf  = pd.DataFrame(data={'mu': mus, 'frac>bg_median': fracs})
+        SaveSample(bigdf, outfile)
 
-    SaveSample(rdf, outfile)
     return 0
 
 def SensitivityFit(model):
@@ -381,27 +387,49 @@ def SensitivityFit(model):
         outdir = model.setpath+'TS/'
     else:
         outdir = model.outdir
-    outfile = outdir+'TS_sensitivity.npy'
-    bgfile  = outdir+'TS_background_00000.npy'
+
+    bgfile = outdir+'TS_background_00000.npy'
+    infile = outdir+('upperlimit.npy' if model.set=='unblinded' else 'sensitivity.npy')
+    outfile = infile.replace('.npy', '_fit.npy')
 
     ## Look for sensitivity file to append to:
-    if 'TS_sensitivity.npy' not in os.listdir(outdir):
+    if infile.split('/')[-1] not in os.listdir(outdir):
         print('Could not find sensitivity file.')
         return -1
 
     ## Load background TS and background median:
-    try:
-        bg = LoadSample(bgfile)
-        bg['minTS'] = bg['minTS']*-1
-        bg_median = np.median(np.sort(bg['minTS'].values))
-        bg_ratio  = len(bg[bg['minTS']>bg_median])/len(bg)
-        rdfbg = pd.DataFrame(data={'mu':[0], 'frac>bg_median':[bg_ratio]})
-    except:
-        bg_median, bg_ratio, rdfbg = 0.0, None, None
+    if model.set == 'unblinded':
+        df0 = TSdist(model, tests=1, mu=0, kind='unblinded', mode='return')
+        bg_TS, bg_ns, rdfbg = np.abs(df0['minTS'][0]), df0['ns'][0], None
+    else:
+        try:
+            bg = LoadSample(bgfile)
+            bg['minTS'] = np.abs(bg['minTS'])
+            bg_TS = np.median(np.sort(bg['minTS'].values))
+            bg_ratio  = len(bg[bg['minTS']>bg_TS])/len(bg)
+            rdfbg = pd.DataFrame(data={'mu':[0], 'frac>bg_TS':[bg_ratio]})
+        except:
+            bg_ns, rdfbg = 0.0, None
 
     ## Load sensitivity file and add background TS:
-    rdf = LoadSample(outfile)
-    rdf = rdf[rdf['mu']>0]
+    try:
+        sen = LoadSample(infile)
+        sen = sen.loc[sen['mu']!=0]
+        mus, fracs, dfs = [], [], []
+        for mu in np.unique(sen['mu'].values):
+            mus.append(mu)
+            df = sen.loc[sen['mu']==mu]
+            tsmin = np.abs(df['minTS'].values)
+            fracs.append(len(tsmin[tsmin>bg_TS])/len(tsmin))
+            dfs.append(df)
+        rdf = pd.DataFrame(data={'mu': mus, 'frac>bg_TS': fracs})
+    except:
+        print('EXCEPTION')
+        rdf = LoadSample(infile.replace('_all', ''))
+        rdf = rdf[rdf['mu']>0]
+        rdf = rdf.rename(columns={'frac>bg_median': 'frac>bg_TS'})
+        rdf = rdf.drop(['90%CL_ns'], axis=1)
+
     rdf = pd.concat([rdf, rdfbg]).sort_values('mu')
 
     ## Fit a saturation function to the data points:
@@ -409,17 +437,132 @@ def SensitivityFit(model):
         return 1-(1-b)*np.exp(-x/a)
 
     x = np.linspace(0, 200, 400)
-    popt, pcov = curve_fit(fitf, rdf['mu'], rdf['frac>bg_median'])
-    F = interp1d(fitf(x, *popt), x, kind='linear')
+    popt, pcov = curve_fit(fitf, rdf['mu'], rdf['frac>bg_TS'])
+    F = interp1d(fitf(x, *popt), x, kind='linear', fill_value='extrapolate')
     ns90 = float(F(0.9))
     rdf['90%CL_ns'] = np.ones(len(rdf['mu']))*ns90
 
-    ## The old way. Don't use, it's not accurate.
-    # F    = interp1d(rdf['frac>bg_median'], rdf['mu'], kind='linear', fill_value='extrapolate')
-    # ns90 = float(F(0.9))
+    if model.set=='unblinded':
+        rdf = rdf.rename(columns={'90%CL_ns': 'UL'})
 
-    # print(rdf)
+    print(rdf)
     SaveSample(rdf, outfile)
+    return 0
+
+def mu90Dist(model, livetime, seed, outfile, numtests=500):
+    ### This function creates a dataframe containing a number of
+    ### TS calculations with fixed background and scrambled injected
+    ### signal. When run with different seeds several times, a distribution
+    ### of mu90 for different realizations of the background can be
+    ### plotted, which can be useful to decide whether an upper limit
+    ### is reasonable or not.
+
+    df0 = TSdist(model, tests=1, mu=0, livetime=livetime, seed=seed, kind='samedata', mode='return')
+    bgTS, bgns = np.abs(df0['minTS'][0]), df0['ns'][0]
+
+    if bgns >= -0.1:
+        mus = [1, 2, 3, 5, 10]
+    else:
+        mus = [10, 20, 30, 55, 85]
+
+    dfs = []
+    dfs.append(df0)
+    for mu in mus:
+        df = TSdist(model, tests=numtests, mu=mu, livetime=livetime, seed=seed, kind='samedata', mode='return')
+        dfs.append(df)
+
+    dfs = pd.concat(dfs)
+    SaveSample(dfs, outfile)
+
+def TSmin(model, livetime, test=True, seed=None):
+
+    ## This only makes sense with the nominal set:
+    if model.set not in ['nominal', 'farsample']:
+        print('Please use nominal or farsample set!')
+        return -1
+
+    if test == True:
+        n_int = int(np.rint(livetime*model.INT.eventsperday))
+        n_osc = int(np.rint(livetime*model.OSC.eventsperday))
+        if seed:
+            sample = CreateCombined(n_int, n_osc, INT=model.INT, OSC=model.OSC, seed=seed)    # good seeds: 1007
+        else:
+            sample = CreateCombined(n_int, n_osc, INT=model.INT, OSC=model.OSC)
+    else:
+        dataset = ('farsample' if model.set=='farsample' else 'unblinded')
+        model.INT.LoadEvents(dataset)
+        model.OSC.LoadEvents(dataset)
+        int_ = getattr(model.INT, 'df_'+dataset)
+        osc_ = getattr(model.OSC, 'df_'+dataset)
+        sample = pd.concat([int_, osc_])
+    N = len(sample)
+    # print(sample)
+
+    model.LoadPDFs()
+    PDF(sample, model, 'INT', 'B')
+    PDF(sample, model, 'INT', 'S')
+    PDF(sample, model, 'OSC', 'B')
+    PDF(sample, model, 'OSC', 'S')
+    sample['S/B'] = sample['SPDF_'+model.name].values/sample['BPDF'].values
+    # sample = sample.sort_values('S/B')
+    # sample = sample.sample(frac=1)
+    # print(sample)
+
+    ## The value of ns that maximizes the LogLikelihood also maximizes the
+    ## test statistics. The test statistics is way easier to maximize (or
+    ## minimize in this case) and not so prone to be stuck in local minima,
+    ## that's why we're using the test statistics here.
+
+    ## Determine lower minimizer bound (to avoid weird behaviour
+    ## in the log function of TS):
+    warnings.filterwarnings('error', category=RuntimeWarning)
+    testns = np.linspace(-300, 300, 61)
+    testTS = []
+    for t_ in testns:
+        try:
+            testTS.append(TestStatistics(t_, sample, model))
+        except:
+            testTS.append(np.nan)
+    testTS = np.array(testTS)
+    warnings.filterwarnings('default', category=RuntimeWarning)
+    lowbound = testns[np.where(np.isfinite(testTS))][0]
+
+    popt = minimize(TestStatistics, 0, args=(sample, model), bounds=((lowbound, N),))
+    TSmin_ns = popt.x[0]
+    TSmin    = np.abs(TestStatistics((0 if TSmin_ns<0 else TSmin_ns), sample, model))
+
+    if model.outdir == 'default':
+        dir_  = model.setpath
+        dirbg = model.setpath+'TS/'
+    else:
+        dir_  = model.outdir
+        dirbg = model.outdir
+
+    if (model.set == 'farsample'):
+        TS   = LoadSample(dirbg+'TS_background_00000.npy')
+        TSbg = np.sort(np.abs(TS['minTS'].values))
+
+        ## P-value:
+        # indx = np.argmin(np.abs(TSbg-TSmin))
+        # numx = len(TSbg)-(indx+1)
+        # pvalue = 1-numx/len(TSbg)
+        ## P-value (same as above, but in one line):
+        pvalue = 1 - len(TSbg[np.where(TSbg>TSmin)])/len(TSbg)
+    else:
+        pvalue = np.nan
+
+    np.savetxt(
+        dir_+'TSmin.txt',
+        np.array([[TSmin], [TSmin_ns], [pvalue]]).T, fmt='%.4e',
+        header='TSmin\tTSmin_ns\tp-value'
+    )
+
+    print('{} {} nsmin, TSmin, P: {:.4f}\t{:.4f}\t{:.6f}'.format(model.batch, model.name, TSmin_ns, TSmin, pvalue))
+    # model.LoadResults()
+    # model.results['TSmin']    = TSmin
+    # model.results['TSmin_ns'] = TSmin_ns
+    # model.SaveResults()
+    # model.UpdateResults()
     return 0
 
 def MRF(model, livetime):
@@ -463,5 +606,5 @@ def MRF(model, livetime):
     # model.SaveResults()
     # model.UpdateResults()
 
-    print('{} {} ns_te, MRF: {:.4e}\t{:4e}'.format(model.batch, model.name, ns, mrf_te))
+    print('{} {} {:15s}\tns_te, MRF: {:.4e}\t{:4e}'.format(model.batch, model.name, model.set, ns, mrf_te))
     return 0

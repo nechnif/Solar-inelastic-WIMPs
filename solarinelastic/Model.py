@@ -201,7 +201,23 @@ class Model(object):
             setattr(self, selection+'_BPDF_evalfine',  Beval)
             setattr(self, selection+'_BPDF_evalintp',  Bintp)
 
-    def CreatePDF(self, selection, SB):
+    def LoadFarsampleFactors(self):
+
+        if self.set != 'farsample':
+            print('ERROR: Current set is "{}", not "farsample".'.format(self.set))
+            return -1
+
+        if self.outdir != 'default':
+            ksfile = self.outdir+'farsample_PDFfactors.txt'
+        else:
+            ksfile = self.setpath+'farsample_PDFfactors.txt'
+
+        with open(ksfile, 'r') as ksf:
+            ks = eval(ksf.read())
+
+        self.farfactors = ks
+
+    def CreatePDF(self, selection, SB, eval=True):
         ### This function creates the PDFs. First as 2D histograms for
         ### comparison purposes, then as KDEs for the actual PDFs. The
         ### PDFs are saved as fine-grid evaluations of the KDEs, which
@@ -221,9 +237,10 @@ class Model(object):
 
         if SB == 'B':
             ## Load sample:
-            sample = LoadSample(SEL.files['background_events'])
             if self.set == 'farsample':
-                sample = sample[sample['sun_psi']>=SEL.psicut_farsample]
+                sample = LoadSample(SEL.files['farsample'])
+            else:
+                sample = LoadSample(SEL.files['background_events'])
 
             ## Prepare histogram:
             if 'weight' not in sample.columns:
@@ -267,6 +284,9 @@ class Model(object):
             np.save(dir_S+SEL.name+'_SPDF_histogram.npy', hist)
             # pickle.dump(KDE, open(dir_S+SEL.name+'_SPDF_KDE.pkl', 'wb'))
 
+        if eval == False:
+            return KDE
+
         ##--- Perform finegrid evaluation: -----------------------------
         name = SB+'PDF_KDE'
 
@@ -286,8 +306,7 @@ class Model(object):
         # print(KDE.integrate_box(self.bounds, delta=200))
 
         ## The transposing happens so that the KDE has the same
-        ## meaning as a numpy histogram2d()[0]; same reason that
-        ## we are saving x, y instead of cx, cy here:
+        ## dimensions as the 2D histogram PDF:
         eval = np.reshape(eval, xx.shape).T
 
         ## Save:
@@ -303,6 +322,55 @@ class Model(object):
         ## Interpolation:
         self.IntpEvalfine(selection, SB)
         print('{} {} done.'.format(SEL.id, name))
+
+        return 0
+
+    def FarsampleFactors(self):
+
+        if self.set != 'farsample':
+            print('ERROR: Current set is "{}", not "farsample".'.format(self.set))
+            return -1
+
+        self.LoadPDFs()
+        ks = {}
+        for selection in ['INT', 'OSC']:
+
+            if self.outdir != 'default':
+                dir_ = self.outdir
+            else:
+                dir_ = self.setpath
+
+            # SEL  = getattr(self, selection)
+            # BKDE = pickle.load(open(dir_B+SEL.files['BPDF_KDE'], 'rb'))
+            # SKDE = self.CreatePDF(selection, SB='S', eval=False)
+            #
+            # box = [[SEL.psicut_farsample, SEL.ebins[0]], [SEL.psibins[-1], SEL.ebins[-1]]]
+            # # print(box)
+            # Bintgrl = BKDE.integrate_box(box=box, delta=delta)
+            # Sintgrl = SKDE.integrate_box(box=box, delta=delta)
+            # ks[selection+'-B'] = 1/Bintgrl
+            # ks[selection+'-S'] = 1/Sintgrl
+            # ks[selection+'-psicut'] = SEL.psicut_farsample
+
+            SEL   = getattr(self, selection)
+            Beval = getattr(self, selection+'_BPDF_evalfine')
+            Seval = getattr(self, selection+'_SPDF_evalfine')
+
+            indx = np.argmin(np.abs(SEL.psifine-SEL.psicut_farsample))
+
+            Beval, Seval = Beval.T, Seval.T
+            Beval = np.where(SEL.psifine<SEL.psifine[indx], 0, Beval)
+            Seval = np.where(SEL.psifine<SEL.psifine[indx], 0, Seval)
+            Beval, Seval = Beval.T, Seval.T
+
+            ks[selection+'-B'] = 1/np.sum(Beval)
+            ks[selection+'-S'] = 1/np.sum(Seval)
+            ks[selection+'-psicut'] = SEL.psicut_farsample
+
+        with open(dir_+'farsample_PDFfactors.txt', 'w') as ksf:
+            ksf.write(str(ks)+'\n')
+
+        return 0
 
     def IntpEvalfine(self, selection, SB):
         ### Interpolate fine grid evaluation.
@@ -361,49 +429,64 @@ class Model(object):
         results = self.results
 
         for name, set in self.sets.items():
-            # print(name, set)
+            setdir = self.modelpath+set[0]
 
-            if 'te_ns.txt' in os.listdir(self.modelpath+set[0]):
-                te, ns = np.loadtxt(self.modelpath+set[0]+'te_ns.txt')
-            else:
-                ns = np.nan
+            if not name in ['farsample', 'unblinded']:
 
-            if 'TS_background_00000.npy' in os.listdir(self.modelpath+set[0]+'TS/'):
-                bg = LoadSample(self.modelpath+set[0]+'TS/TS_background_00000.npy')
-                bg_median = np.median(np.sort(bg['minTS'].values*-1))
-            else:
-                bg_median = np.nan
+                try:
+                    bg = LoadSample(setdir+'TS/TS_background_00000.npy')
+                    bg_median = np.median(np.sort(bg['minTS'].values*-1))
+                except:
+                    bg_median = np.nan
 
-            if 'TS_sensitivity.npy' in os.listdir(self.modelpath+set[0]+'TS/'):
-                rdf = LoadSample(self.modelpath+set[0]+'TS/TS_sensitivity.npy')
-                if '90%CL_ns' in rdf.columns:
+                try:
+                    rdf = LoadSample(setdir+'TS/sensitivity_fit.npy')
                     mu90 = rdf['90%CL_ns'][0]
-                else:
+                except:
                     mu90 = np.nan
-            else:
-                mu90 = np.nan
 
-            if 'MRF.txt' in os.listdir(self.modelpath+set[0]):
-                te, ns, mrf_te = np.loadtxt(self.modelpath+set[0]+'MRF.txt')
-            else:
-                mrf_te = np.nan
+                try:
+                    te, ns = np.loadtxt(setdir+'te_ns.txt')
+                except:
+                    te, ns = np.nan, np.nan
 
-            if name=='nominal' and ('TSmin.txt' in os.listdir(self.setpath)):
-                TSmin, TSmin_ns = np.loadtxt(self.setpath+'TSmin.txt', unpack=True)
-            else:
-                TSmin, TSmin_ns = np.nan, np.nan
+                try:
+                    te, ns, mrf_te = np.loadtxt(setdir+'MRF.txt')
+                except:
+                     mrf_te = np.nan
 
-            # Creating results dictionary:
-            new_results = {
-                'te'                   : te,
-                'TS0_median '   +name  : bg_median,
-                '90%CL_ns '     +name  : mu90,
-                'ns_te '        +name  : ns,
-                'MRF_te '       +name  : mrf_te,
+                # Creating results dictionary:
+                new_results = {
+                    'te'                   : te,
+                    'TS0_median '   +name  : bg_median,
+                    '90%CL_ns '     +name  : mu90,
+                    'ns_te '        +name  : ns,
+                    'MRF_te '       +name  : mrf_te,
+                }
 
-                'TSmin '        +name  : TSmin,
-                'TSmin_ns '     +name  : TSmin_ns,
-            }
+
+            if name in ['farsample', 'unblinded']:
+
+                try:
+                    TSmin, TSmin_ns, pvalue = np.loadtxt(setdir+'TSmin.txt', unpack=True)
+                    TSmin = TSmin*-1
+                except:
+                    TSmin, TSmin_ns, pvalue = np.nan, np.nan, np.nan
+
+                try:
+                    rdf = LoadSample(setdir+'TS/upperlimit_fit.npy')
+                    muUL = rdf['UL'][0]
+                except:
+                    muUL = np.nan
+
+                # Creating results dictionary:
+                new_results = {
+                    'TSmin '        +name  : TSmin,
+                    'TSmin_ns '     +name  : TSmin_ns,
+                    'P '            +name  : pvalue,
+                    'UL '           +name  : muUL,
+                }
+
 
             for key, value in new_results.items():
                 results[key] = value
@@ -412,6 +495,7 @@ class Model(object):
             # results.pop('MaxlogL_ns '+name, None)
             # results.pop('TSmin'   , None)
             # results['batch'] = self.batch
+            # print(new_results)
 
         # results.pop('equi_el', None)
         # results.pop('equi_inel', None)

@@ -3,7 +3,6 @@ import numpy as np
 
 #--- bins --------------------------------------------------------------
 psicut = np.deg2rad(180.0)
-psicut_farsample = np.deg2rad(89.70)
 logEcut = [np.log10(5), np.log10(300)]
 
 m = 8
@@ -11,6 +10,8 @@ psibins = np.linspace(0,          psicut,     20)
 ebins   = np.linspace(logEcut[0], logEcut[1], 20)
 psifine = np.linspace(psibins[0], psibins[-1], len(psibins)*m-(m-1))
 efine   = np.linspace(ebins[0],   ebins[-1],   len(ebins)  *m-(m-1))
+
+psicut_farsample = psifine[76]
 
 bounds_b = [[-np.inf,          np.min(ebins)],
             [ np.inf,          np.inf       ]]
@@ -36,10 +37,10 @@ id = 0.0
 total           = 135063
 livetime        = 3357
 eventsperday    = 40.2332
-eventsper9years = 132930.6381
+eventsper9years = 132930.6381 # per 3304 days
 ## Fraction of total analysis sample (obtained by int_events/(int_events+oscevents)
 ## from the background_events datasets):
-frac            = 0.952771
+frac            = 0.952992
 
 #--- file locations ----------------------------------------------------
 name = 'OSC'
@@ -63,14 +64,16 @@ sets = {
     'HIceP0+1'     : ['0303',     350000],     # +1, 0(?) | +0.3, -0.05
 
     # other sets   name           # of oversamples
-    'farsample'    : ['0000farsample', 0],     # Contains half of nominal set (far-from-sun-events)
+    'farsample'    : ['farsample',     0],     # Contains half of nominal set (far-from-sun-events)
+    'unblinded'    : ['unblinded',     0],     # Unscrambled set
 
 }
 
 files = {
     'sun'               : selectionpath+'sun/sundir_01.npy',
     'exp'               : selectionpath+'exp/oscNext_pisa_data_11-20_vrbusse_scrambled-01.npy',
-    'background_events' : selectionpath+'exp/oversample/oscNext_pisa_data_11-20_vrbusse_scrambled-01_ov8.npy',
+    'background_ov'     : selectionpath+'exp/oversample/oscNext_pisa_data_11-20_vrbusse_scrambled-01_ov8.npy',
+    'background_events' : selectionpath+'exp/oversample/background.npy',
     'BPDF_histogram'    : 'OSC_BPDF_histogram'+tag+'.npy',
     'BPDF_KDE'          : 'OSC_BPDF_KDE'+tag+'.pkl',
     'BPDF_KDE_evalfine' : 'OSC_BPDF_KDE_evalfine'+tag+'.npy',
@@ -80,7 +83,6 @@ files = {
     'Aeff'              : selectionpath+'Aeff/'+str(id)+'_Aeff.npy',
 
     'farsample'         : selectionpath+'exp/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED_farsample.npy',
-    'farsample_ov'      : selectionpath+'exp/oversample/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED_farsample_ov.npy',
     'unblinded'         : selectionpath+'exp/oscNext_pisa_data_11-20_vrbusse_UNSCRAMBLED.npy',
 }
 
