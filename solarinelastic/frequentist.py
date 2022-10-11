@@ -125,12 +125,12 @@ def TSdist(model, tests, mu, kind='data', livetime=None, N=None, ratio=None, mod
     ### needs to be 1, and N is mandatory.
     ### If livetime, N is calculated automatically.
 
-    if kind == 'unblinded':
-        ## For the unblinded set, N is set automatically; livetime and ratio are ignored.
-        print('WARNING: Using unblinded dataset!')
+    if (kind == 'unblinded') or (kind == 'samedata'):
+        ## For the unblinded/ test-unblinded set, N is set
+        ## automatically; livetime and ratio are ignored.
+        print('WARNING: Using unblinded dataset!' if kind=='unblinded' else None)
         livetime, ratio = None, None
         N_int, N_osc = np.rint(model.INT.total), np.rint(model.OSC.total)
-        # N_int, N_osc = np.rint(model.INT.eventsper9years), np.rint(model.OSC.eventsper9years)
         N = int(N_int+N_osc)
         ratio_int, ratio_osc = model.INT.frac, model.OSC.frac
     elif livetime and not (N and ratio):
@@ -279,7 +279,6 @@ def TSdist(model, tests, mu, kind='data', livetime=None, N=None, ratio=None, mod
             popt = minimize(TestStatistics, mu_inj[i], args=(sample_, model), bounds=((0, N),))
         else:
             popt = minimize(TestStatistics, mu_inj[i], args=(sample_, model), bounds=((lowbound, N),))
-            # popt = minimize(TestStatistics, mu_inj[i], args=(sample_, model), bounds=((-100, N),))
         mu_     = popt.x[0]
         ns.append(mu_)
         ts_     = TestStatistics((0 if mu_<0 else mu_), sample_, model)
@@ -335,10 +334,7 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=N
         outdir = model.outdir
 
     bgfile  = outdir+'TS_background_00000.npy'
-    if model.set == 'unblinded':
-        outfile = outdir+'upperlimit.npy'
-    else:
-        outfile = outdir+'sensitivity.npy'
+    outfile = outdir+'sensitivity.npy'
 
     ## Look for sensitivity file to append to:
     if (append==True) and (outfile.split('/')[-1] not in os.listdir(outdir)):
@@ -348,13 +344,6 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=N
     ## Points for fit:
     if isinstance(points, (list, np.ndarray)):
         testpoints = points
-    elif model.set == 'unblinded':
-        df0 = TSdist(model, tests=1, mu=0, kind='unblinded', mode='return')
-        bgTS, bgns = np.abs(df0['minTS'][0]), df0['ns'][0]
-        if bgns >= -0.1:
-            testpoints = [1., 2., 3., 5., 10., 20.]
-        else:
-            testpoints = [10., 20., 30., 55., 85.]
     else:
         testpoints = [10., 20., 30., 55., 85.]
 
@@ -372,7 +361,7 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=N
         ## Use this if you want to improve your sensitivity with
         ## successive calculations:
         olddf = LoadSample(outfile)
-        newdf = pd.concat([olddf, bigdf])
+        newdf = pd.concat([olddf, bigdf]).sort_values('mu')
         print(newdf)
         SaveSample(newdf, outfile)
     else:
@@ -381,7 +370,7 @@ def Sensitivity(model, livetime, numtests=500, points=None, append=False, seed=N
 
     return 0
 
-def SensitivityFit(model):
+def SensitivityFit(model, testunblinding=False, seed=None):
 
     if model.outdir == 'default':
         outdir = model.setpath+'TS/'
@@ -389,46 +378,43 @@ def SensitivityFit(model):
         outdir = model.outdir
 
     bgfile = outdir+'TS_background_00000.npy'
-    infile = outdir+('upperlimit.npy' if model.set=='unblinded' else 'sensitivity.npy')
-    outfile = infile.replace('.npy', '_fit.npy')
+    infile = outdir+'sensitivity.npy'
+    outfile = outdir+('upperlimit_fit.npy' if model.set=='unblinded' else 'sensitivity_fit.npy')
 
     ## Look for sensitivity file to append to:
     if infile.split('/')[-1] not in os.listdir(outdir):
         print('Could not find sensitivity file.')
         return -1
 
-    ## Load background TS and background median:
+    ## Load background TS:
+    bg = LoadSample(bgfile)
+    bg['minTS'] = np.abs(bg['minTS'])
+    bg_TS = np.median(np.sort(bg['minTS'].values))
+
+    ## Determine background TS value (which is the median background TS
+    ## except for the unblinded sample or test unblinding):
     if model.set == 'unblinded':
         df0 = TSdist(model, tests=1, mu=0, kind='unblinded', mode='return')
-        bg_TS, bg_ns, rdfbg = np.abs(df0['minTS'][0]), df0['ns'][0], None
+        bg_TS, bg_ns = np.abs(df0['minTS'][0]), df0['ns'][0]
+    elif testunblinding==True:
+        df0 = TSdist(model, tests=1, mu=0, kind='samedata', mode='return', seed=seed)
+        bg_TS, bg_ns, = np.abs(df0['minTS'][0]), df0['ns'][0]
     else:
-        try:
-            bg = LoadSample(bgfile)
-            bg['minTS'] = np.abs(bg['minTS'])
-            bg_TS = np.median(np.sort(bg['minTS'].values))
-            bg_ratio  = len(bg[bg['minTS']>bg_TS])/len(bg)
-            rdfbg = pd.DataFrame(data={'mu':[0], 'frac>bg_TS':[bg_ratio]})
-        except:
-            bg_ns, rdfbg = 0.0, None
+        bg_TS, bg_ns = np.median(np.sort(bg['minTS'].values)), 0.0
+
+    bg_ratio  = len(bg[bg['minTS']>bg_TS])/len(bg)
+    rdfbg = pd.DataFrame(data={'mu':[0], 'frac>bg_TS':[bg_ratio]})
 
     ## Load sensitivity file and add background TS:
-    try:
-        sen = LoadSample(infile)
-        sen = sen.loc[sen['mu']!=0]
-        mus, fracs, dfs = [], [], []
-        for mu in np.unique(sen['mu'].values):
-            mus.append(mu)
-            df = sen.loc[sen['mu']==mu]
-            tsmin = np.abs(df['minTS'].values)
-            fracs.append(len(tsmin[tsmin>bg_TS])/len(tsmin))
-            dfs.append(df)
-        rdf = pd.DataFrame(data={'mu': mus, 'frac>bg_TS': fracs})
-    except:
-        print('EXCEPTION')
-        rdf = LoadSample(infile.replace('_all', ''))
-        rdf = rdf[rdf['mu']>0]
-        rdf = rdf.rename(columns={'frac>bg_median': 'frac>bg_TS'})
-        rdf = rdf.drop(['90%CL_ns'], axis=1)
+    sen = LoadSample(infile)
+    mus, fracs, dfs = [], [], []
+    for mu in np.unique(sen['mu'].values):
+        mus.append(mu)
+        df = sen.loc[sen['mu']==mu]
+        tsmin = np.abs(df['minTS'].values)
+        fracs.append(len(tsmin[tsmin>bg_TS])/len(tsmin))
+        dfs.append(df)
+    rdf = pd.DataFrame(data={'mu': mus, 'frac>bg_TS': fracs})
 
     rdf = pd.concat([rdf, rdfbg]).sort_values('mu')
 
@@ -446,33 +432,12 @@ def SensitivityFit(model):
         rdf = rdf.rename(columns={'90%CL_ns': 'UL'})
 
     print(rdf)
-    SaveSample(rdf, outfile)
-    return 0
-
-def mu90Dist(model, livetime, seed, outfile, numtests=500):
-    ### This function creates a dataframe containing a number of
-    ### TS calculations with fixed background and scrambled injected
-    ### signal. When run with different seeds several times, a distribution
-    ### of mu90 for different realizations of the background can be
-    ### plotted, which can be useful to decide whether an upper limit
-    ### is reasonable or not.
-
-    df0 = TSdist(model, tests=1, mu=0, livetime=livetime, seed=seed, kind='samedata', mode='return')
-    bgTS, bgns = np.abs(df0['minTS'][0]), df0['ns'][0]
-
-    if bgns >= -0.1:
-        mus = [1, 2, 3, 5, 10]
+    if testunblinding==True:
+        return 0
     else:
-        mus = [10, 20, 30, 55, 85]
+        SaveSample(rdf, outfile)
 
-    dfs = []
-    dfs.append(df0)
-    for mu in mus:
-        df = TSdist(model, tests=numtests, mu=mu, livetime=livetime, seed=seed, kind='samedata', mode='return')
-        dfs.append(df)
-
-    dfs = pd.concat(dfs)
-    SaveSample(dfs, outfile)
+    return 0
 
 def TSmin(model, livetime, test=True, seed=None):
 
@@ -580,7 +545,6 @@ def MRF(model, livetime):
         te = model.results['te']
         ns = model.results['ns_te '+model.set]
         if te != livetime:
-            print('hello1')
             te, ns = NumberOfSignalEvents(model, livetime)
     else:
         te, ns = NumberOfSignalEvents(model, livetime)

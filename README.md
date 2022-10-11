@@ -13,7 +13,11 @@ Analysis motivation, theoretical background, results, methods, locations of data
 
 ## Installation
 
-Clone this repo and just execute the setup script:
+Clone this repo and pull the submodule with:
+
+`git submodule update --init --recursive`
+
+Then just execute the setup script:
 
 `setup.py install --user`
 
