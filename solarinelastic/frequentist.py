@@ -128,7 +128,7 @@ def TSdist(model, tests, mu, kind='data', livetime=None, N=None, ratio=None, mod
     if (kind == 'unblinded') or (kind == 'samedata'):
         ## For the unblinded/ test-unblinded set, N is set
         ## automatically; livetime and ratio are ignored.
-        print('WARNING: Using unblinded dataset!' if kind=='unblinded' else None)
+        print('WARNING: Using unblinded dataset!' if kind=='unblinded' else 'Running unblinding test with scrambled set.')
         livetime, ratio = None, None
         N_int, N_osc = np.rint(model.INT.total), np.rint(model.OSC.total)
         N = int(N_int+N_osc)
@@ -433,7 +433,7 @@ def SensitivityFit(model, testunblinding=False, seed=None):
 
     print(rdf)
     if testunblinding==True:
-        return 0
+        return bg_TS, bg_ns, ns90
     else:
         SaveSample(rdf, outfile)
 
@@ -441,8 +441,8 @@ def SensitivityFit(model, testunblinding=False, seed=None):
 
 def TSmin(model, livetime, test=True, seed=None):
 
-    ## This only makes sense with the nominal set:
-    if model.set not in ['nominal', 'farsample']:
+    ## This only makes sense with the nominal sets:
+    if model.set not in ['nominal', 'unblinded', 'farsample']:
         print('Please use nominal or farsample set!')
         return -1
 
@@ -534,6 +534,17 @@ def MRF(model, livetime):
     ### Calculate the model rejection factor.
 
     model.UpdateResults()
+
+    # if model.set == 'unblinded':
+    #     intag = 'UL unblinded'
+    #     outfile = 'MRF_unblinded.txt'
+    # else:
+    #     intag = '90%CL_ns '+model.set
+    #     outfile = 'MRF.txt'
+    #
+    # if intag in model.results.keys():
+    #     mu90 = model.results[intag]
+
     if '90%CL_ns '+model.set in model.results.keys():
         mu90 = model.results['90%CL_ns '+model.set]
     else:

@@ -451,7 +451,7 @@ class Model(object):
                     te, ns = np.nan, np.nan
 
                 try:
-                    te, ns, mrf_te = np.loadtxt(setdir+'MRF.txt')
+                    _, _, mrf_te = np.loadtxt(setdir+'MRF.txt')
                 except:
                      mrf_te = np.nan
 

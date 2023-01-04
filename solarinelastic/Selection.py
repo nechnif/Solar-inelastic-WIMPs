@@ -259,7 +259,7 @@ class Selection(object):
             # print('{:.2e} {:.2e}'.format(np.sum(aeff_e*np.diff(ebins)), np.sum(aeff_z*np.diff(zbins))))
 
             aeff_hist[0] = aeff
-            np.save(self.selectionpath+'Aeff/'+str(self.ID)+'_'+name+'_Aeff.npy', tuple(aeff_hist))
+            np.save(self.selectionpath+'Aeff/'+str(self.id)+'_'+name+'_Aeff.npy', tuple(aeff_hist))
 
     def LoadAeff(self):
         ### Unit: cm^2
